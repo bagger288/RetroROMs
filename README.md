@@ -1,6 +1,8 @@
-# 🎮 RetroROMs
-
 <div align="center">
+
+<img src="art/icon.png" width="120" height="120" alt="RetroROMs App Icon" />
+
+# RetroROMs
 
 ![Android](https://img.shields.io/badge/Platform-Android_8.0+_(API_26--35)-3DDC84?style=for-the-badge&logo=android&logoColor=white)
 ![Kotlin](https://img.shields.io/badge/Language-Kotlin_2.2.10-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white)
