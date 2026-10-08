@@ -12,7 +12,7 @@
 
 **Нативное Android-приложение для каталогизации, поиска и загрузки ретро-игр с портала [Emu-Land.net](https://www.emu-land.net) с автоматической раскладкой по папкам консолей и умной распаковкой ZIP-архивов.**
 
-[Возможности](#-основные-возможности) • [Архитектура](#-архитектура-и-стек) • [Скриншоты и интерфейс](#-пользовательский-интерфейс) • [Сборка проекта](#-сборка-и-запуск) • [Пайплайн загрузки](#-пайплайн-загрузки-и-распаковки) • [Roadmap](#-roadmap)
+[Возможности](#-основные-возможности) • [Платформы](#-поддерживаемые-платформы) • [Архитектура](#-архитектура-и-стек) • [Пайплайн загрузки](#-пайплайн-загрузки-и-распаковки) • [Сборка проекта](#-сборка-и-запуск) • [Roadmap](#-roadmap)
 
 </div>
 
@@ -20,10 +20,14 @@
 
 ## ✨ Основные возможности
 
-* **📚 Каталог десятков ретро-платформ:**
-  Dendy / NES, Sega Genesis / Mega Drive, Super Nintendo (SNES), Game Boy, Game Boy Color, Game Boy Advance, Sony PlayStation 1 (PS1), Nintendo 64 (N64), Sega Dreamcast, Sega Saturn, Nintendo DS, PSP, Master System, PC Engine, Atari 2600, 3DO и другие.
+* **📚 Каталог 33 ретро-платформ со скачиваемыми играми:**
+  Поддержка всех консолей и портативных систем с портала [Emu-Land.net](https://www.emu-land.net), для которых доступны реальные ROM-файлы и ISO-образы: Dendy / NES, Sega Mega Drive, SNES, Game Boy, GBC, GBA, PlayStation 1, Nintendo 64, PC Engine, 3DO, Atari и многие другие.
+* **🎯 Исключение пустых платформ:**
+  Платформы без файлов игр (такие как Nintendo DS, 3DS, Wii, Wii U, Sony PSP, PS2, Sega Dreamcast, Sega Saturn, Xbox и др.) автоматически скрыты из каталога, чтобы не вводить пользователя в заблуждение пустыми страницами.
+* **⚡ Динамические категории и алфавитный указатель:**
+  Список разделов каждой консоли формируется динамически на основе HTML-блока `#pagelist_top` («Топ игр», «Лучшие», «Рейтинг», «Русские версии», а также активные буквы алфавита, по которым действительно есть игры). Никаких неработающих кнопок и пустых категорий.
 * **🔍 Поиск и фильтрация:**
-  Мгновенный поиск игр по сайту, фильтрация по категориям («Топ игр», «Все игры», «Русские версии», «Хиты») и сортировка.
+  Мгновенный поиск игр по каталогу платформы или сквозной поиск по всему сайту, фильтрация по популярности, оценкам и алфавиту.
 * **📦 Выбор ревизий и версий РОМов:**
   Просмотр всех доступных версий игры (USA, Europe, Japan, фанатские переводы на русский, хаки, пиратские дампы, GoodSet).
 * **🗂️ Автоматическая организация на накопителе:**
@@ -38,6 +42,60 @@
   Названия игр отображаются компактно, а при касании к тайлу плавно запускается бегущая строка, предотвращая превращение экрана в хаотичное табло.
 * **🎨 Темы оформления (Retro Arcade Themes):**
   Встроенные пресеты (Arcade Neon, Cyberpunk, Retrowave, Game Boy Classic), ручной выбор акцентных цветов через RGB-палитру и переключатель вида каталога (Сетка / Список).
+
+---
+
+## 🕹 Поддерживаемые платформы
+
+В приложении представлено **33 ретро-платформы**, для которых на [Emu-Land.net](https://www.emu-land.net) доступны прямые загрузки ROM-файлов и ISO-образов:
+
+### 📺 Домашние консоли (15 платформ)
+| Платформа | Slug | Поколение / Тип | Формат игр |
+| :--- | :--- | :--- | :--- |
+| **NES / Famicom / Dendy** | `dendy` | 8-bit (1983) | ROMs (.nes) |
+| **Sega Mega Drive / Genesis** | `genesis` | 16-bit (1988) | ROMs (.bin, .gen, .smd) |
+| **Super Nintendo (SNES)** | `snes` | 16-bit (1990) | ROMs (.smc, .sfc) |
+| **Sony PlayStation 1** | `psx` | 32-bit (1994) | ISO (.cue/.bin, .chd) |
+| **Nintendo 64** | `n64` | 64-bit (1996) | ROMs (.z64, .n64, .v64) |
+| **Sega 32X** | `32x` | 32-bit (1994) | ROMs (.32x) |
+| **Sega CD / Mega CD** | `segacd` | 16-bit CD (1991) | Games / ISO (.cue/.bin) |
+| **Sega Master System** | `sms` | 8-bit (1985) | ROMs (.sms) |
+| **Sega SG-1000** | `sg-1000` | 8-bit (1983) | Games (.sg) |
+| **PC Engine / TurboGrafx-16** | `pce` | 16-bit (1987) | ROMs (.pce) |
+| **PC Engine CD / TurboGrafx CD** | `pcecd` | 16-bit CD (1988) | Games / ISO (.cue/.bin) |
+| **3DO Interactive Multiplayer** | `3do` | 32-bit (1993) | Games / ISO (.iso, .cue) |
+| **Famicom Disk System** | `famicom_disk_system` | 8-bit (1986) | Games (.fds) |
+| **Neo Geo CD** | `neogeocd` | 16-bit CD (1994) | Games / ISO (.cue/.bin) |
+| **Atari Jaguar** | `jaguar` | 64-bit (1993) | ROMs (.j64) |
+
+### 📱 Портативные системы (10 платформ)
+| Платформа | Slug | Поколение / Тип | Формат игр |
+| :--- | :--- | :--- | :--- |
+| **Game Boy Advance** | `gba` | Handheld 32-bit (2001) | ROMs (.gba) |
+| **Game Boy** | `gb` | Handheld 8-bit (1989) | Games (.gb) |
+| **Game Boy Color** | `gbc` | Handheld 8-bit (1998) | Games (.gbc) |
+| **Sega Game Gear** | `gg` | Handheld 8-bit (1990) | ROMs (.gg) |
+| **Atari Lynx** | `lynx` | Handheld 16-bit (1989) | ROMs (.lnx) |
+| **Neo Geo Pocket** | `ngp` | Handheld 16-bit (1998) | ROMs (.ngp, .ngc) |
+| **Bandai WonderSwan** | `ws` | Handheld 16-bit (1999) | ROMs (.ws, .wsc) |
+| **Nintendo Virtual Boy** | `vboy` | 32-bit Tabletop (1995) | ROMs (.vb) |
+| **Pokémon Mini** | `pmini` | Handheld 8-bit (2001) | ROMs (.min) |
+| **Watara Supervision** | `sv` | Handheld 8-bit (1992) | ROMs (.sv) |
+
+### 🕹️ Классические и ранние системы (8 платформ)
+| Платформа | Slug | Поколение / Тип | Формат игр |
+| :--- | :--- | :--- | :--- |
+| **Atari 2600** | `2600` | Classic (1977) | ROMs (.a26) |
+| **Atari 5200** | `5200` | Classic (1982) | ROMs (.a52) |
+| **Atari 7800** | `7800` | Classic (1986) | ROMs (.a78) |
+| **ColecoVision** | `coleco` | Classic (1982) | ROMs (.col) |
+| **Vectrex** | `vectrex` | Classic Vector (1982) | ROMs (.vec) |
+| **Intellivision** | `intellivision` | Classic (1979) | ROMs (.int) |
+| **Emerson Arcadia 2001** | `arcadia` | Classic (1982) | ROMs (.bin) |
+| **Fairchild Channel F** | `chaf` | Classic (1976) | ROMs (.chf) |
+
+> 💡 **Исключённые платформы (без РОМов на сайте):**  
+> Платформы, на страницах которых на Emu-Land отсутствуют скачиваемые архивы игр (такие как **Nintendo DS, Nintendo 3DS, Nintendo Wii, Wii U, Sony PSP, PS2, PS3, Sega Dreamcast, Sega Saturn, Xbox, Xbox 360**), намеренно исключены из каталога приложения. Это гарантирует, что пользователь видит только те системы, где действительно можно скачивать игры.
 
 ---
 
@@ -169,6 +227,8 @@ gradle assembleDebug
 - [x] Интерактивный диалог выбора файлов для multi-ROM архивов.
 - [x] Полноэкранный просмотр обложек по долгому нажатию.
 - [x] Бегущие строки (Marquee) при взаимодействии с тайлом.
+- [x] Фильтрация каталога: отображение только систем с доступными для скачивания РОМами (33 системы).
+- [x] Динамический парсинг категорий и алфавитных фильтров из блока `#pagelist_top` сайта.
 - [ ] Поддержка распаковки `.7z`-архивов.
 - [ ] Запуск скачанных РОМов в установленных на устройстве эмуляторах через Android Intent (`ACTION_VIEW`).
 - [ ] Очередь параллельных загрузок с паузой/возобновлением.

@@ -454,6 +454,31 @@ class EmuLandViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    fun moveConsoleUp(slug: String) {
+        viewModelScope.launch {
+            repository.moveConsoleUp(slug)
+        }
+    }
+
+    fun moveConsoleDown(slug: String) {
+        viewModelScope.launch {
+            repository.moveConsoleDown(slug)
+        }
+    }
+
+    fun moveConsoleToTop(slug: String) {
+        viewModelScope.launch {
+            repository.moveConsoleToTop(slug)
+        }
+    }
+
+    fun resetConsolesOrder() {
+        viewModelScope.launch {
+            repository.resetConsolesOrder()
+            _userMessage.emit("Порядок платформ сброшен по умолчанию")
+        }
+    }
+
     fun setShowManageConsoles(show: Boolean) {
         _showManageConsoles.value = show
     }

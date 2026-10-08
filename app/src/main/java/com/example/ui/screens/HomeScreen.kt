@@ -217,47 +217,28 @@ fun HomeScreen(
                 }
             }
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(
-                    onClick = onRefresh,
-                    enabled = !isRefreshing,
-                    modifier = Modifier
-                        .testTag("refresh_btn")
-                        .size(36.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(ArcadeSurfaceVariant)
-                ) {
-                    if (isRefreshing) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
-                            color = NeonCyan,
-                            strokeWidth = 2.dp
-                        )
-                    } else {
-                        Icon(
-                            imageVector = Icons.Default.Refresh,
-                            contentDescription = "Обновить с Emu-Land",
-                            tint = TextSecondary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.width(8.dp))
-
-                IconButton(
-                    onClick = onOpenManageConsoles,
-                    modifier = Modifier
-                        .testTag("manage_consoles_btn")
-                        .size(36.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(ArcadeSurfaceVariant)
-                ) {
+            IconButton(
+                onClick = onRefresh,
+                enabled = !isRefreshing,
+                modifier = Modifier
+                    .testTag("refresh_btn")
+                    .size(50.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(ArcadeSurfaceVariant)
+                    .border(1.dp, ArcadeCardBorder, RoundedCornerShape(12.dp))
+            ) {
+                if (isRefreshing) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        color = NeonCyan,
+                        strokeWidth = 2.dp
+                    )
+                } else {
                     Icon(
-                        imageVector = Icons.Default.Tune,
-                        contentDescription = "Настройки и оформление",
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = "Обновить с Emu-Land",
                         tint = NeonCyan,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(20.dp)
                     )
                 }
             }

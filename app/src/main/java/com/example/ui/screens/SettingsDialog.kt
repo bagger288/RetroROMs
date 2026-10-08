@@ -2,9 +2,11 @@ package com.example.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +20,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -27,9 +30,12 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ColorLens
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Gamepad
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.VerticalAlignTop
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -54,6 +60,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.testTag
@@ -104,6 +111,10 @@ fun SettingsDialog(
     catalogViewMode: CatalogViewMode = CatalogViewMode.GRID,
     onToggleConsole: (String, Boolean) -> Unit,
     onSetAllConsoles: (Boolean) -> Unit,
+    onMoveConsoleUp: (String) -> Unit = {},
+    onMoveConsoleDown: (String) -> Unit = {},
+    onMoveConsoleToTop: (String) -> Unit = {},
+    onResetConsolesOrder: () -> Unit = {},
     onSelectThemeMode: (ThemeMode) -> Unit,
     onSelectCatalogViewMode: (CatalogViewMode) -> Unit = {},
     onApplyPreset: (ThemePreset) -> Unit,
@@ -246,7 +257,7 @@ fun SettingsDialog(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "Выберите системы для каталога:",
+                            text = "Платформы и их порядок:",
                             color = TextSecondary,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Medium
@@ -256,29 +267,49 @@ fun SettingsDialog(
                             Text(
                                 text = "Все",
                                 color = NeonCyan,
-                                fontSize = 12.sp,
+                                fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(6.dp))
                                     .background(ArcadeSurfaceVariant)
                                     .clickable { onSetAllConsoles(true) }
-                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                                    .padding(horizontal = 7.dp, vertical = 4.dp)
                             )
                             Text(
                                 text = "Снять",
                                 color = TextMuted,
-                                fontSize = 12.sp,
+                                fontSize = 11.sp,
                                 fontWeight = FontWeight.Medium,
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(6.dp))
                                     .background(ArcadeSurfaceVariant)
                                     .clickable { onSetAllConsoles(false) }
-                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                                    .padding(horizontal = 7.dp, vertical = 4.dp)
+                            )
+                            Text(
+                                text = "Сброс",
+                                color = GoldenAmber,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(ArcadeSurfaceVariant)
+                                    .clickable { onResetConsolesOrder() }
+                                    .padding(horizontal = 7.dp, vertical = 4.dp)
                             )
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Text(
+                        text = "Используйте ▲ ▼ или ⤒ (в топ), чтобы поднять избранные консоли. Они будут первыми на главном экране!",
+                        color = TextMuted,
+                        fontSize = 10.sp,
+                        lineHeight = 13.sp
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
 
                     LazyColumn(
                         modifier = Modifier
@@ -286,7 +317,9 @@ fun SettingsDialog(
                             .weight(1f),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(consoles, key = { it.slug }) { console ->
+                        itemsIndexed(consoles, key = { _, console -> console.slug }) { index, console ->
+                            var isMarquee by remember(console.slug) { mutableStateOf(false) }
+
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -298,7 +331,7 @@ fun SettingsDialog(
                                         RoundedCornerShape(12.dp)
                                     )
                                     .clickable { onToggleConsole(console.slug, !console.isEnabled) }
-                                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                                    .padding(horizontal = 8.dp, vertical = 8.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
@@ -306,51 +339,123 @@ fun SettingsDialog(
                                     verticalAlignment = Alignment.CenterVertically,
                                     modifier = Modifier.weight(1f)
                                 ) {
+                                    // Order Badge (#1, #2...)
                                     Box(
                                         modifier = Modifier
-                                            .size(36.dp)
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .background(if (console.isEnabled) NeonCyan.copy(alpha = 0.2f) else ArcadeSurfaceContainer),
+                                            .size(width = 24.dp, height = 24.dp)
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(ArcadeSurfaceContainer),
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Gamepad,
-                                            contentDescription = null,
-                                            tint = if (console.isEnabled) NeonCyan else TextMuted,
-                                            modifier = Modifier.size(20.dp)
+                                        Text(
+                                            text = "${index + 1}",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (console.isEnabled) TextSecondary else TextMuted
                                         )
                                     }
 
-                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Spacer(modifier = Modifier.width(10.dp))
 
-                                    Column {
+                                    Column(modifier = Modifier.weight(1f)) {
                                         Text(
                                             text = console.name,
                                             color = if (console.isEnabled) TextPrimary else TextMuted,
-                                            fontSize = 14.sp,
+                                            fontSize = 13.sp,
                                             fontWeight = FontWeight.SemiBold,
                                             maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
+                                            overflow = if (isMarquee) TextOverflow.Clip else TextOverflow.Ellipsis,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .then(
+                                                    if (isMarquee) {
+                                                        Modifier.basicMarquee(
+                                                            iterations = 4,
+                                                            initialDelayMillis = 200,
+                                                            repeatDelayMillis = 800,
+                                                            velocity = 32.dp
+                                                        )
+                                                    } else Modifier
+                                                )
+                                                .clickable(
+                                                    interactionSource = remember { MutableInteractionSource() },
+                                                    indication = null
+                                                ) {
+                                                    isMarquee = !isMarquee
+                                                }
                                         )
-                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Spacer(modifier = Modifier.height(1.dp))
                                         Text(
                                             text = "${console.category} • ${console.releaseYear}",
                                             color = TextMuted,
-                                            fontSize = 11.sp
+                                            fontSize = 10.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
                                         )
                                     }
                                 }
 
-                                Switch(
-                                    checked = console.isEnabled,
-                                    onCheckedChange = { onToggleConsole(console.slug, it) },
-                                    colors = SwitchDefaults.colors(
-                                        checkedThumbColor = OnPrimary,
-                                        checkedTrackColor = NeonCyan,
-                                        uncheckedThumbColor = TextMuted,
-                                        uncheckedTrackColor = ArcadeSurfaceContainer
+                                Spacer(modifier = Modifier.width(4.dp))
+
+                                // Reorder actions & Switch
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(1.dp)
+                                ) {
+                                    if (index > 0) {
+                                        IconButton(
+                                            onClick = { onMoveConsoleToTop(console.slug) },
+                                            modifier = Modifier.size(28.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.VerticalAlignTop,
+                                                contentDescription = "В самый верх",
+                                                tint = GoldenAmber,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                    } else {
+                                        Spacer(modifier = Modifier.size(28.dp))
+                                    }
+
+                                    IconButton(
+                                        onClick = { onMoveConsoleUp(console.slug) },
+                                        enabled = index > 0,
+                                        modifier = Modifier.size(28.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.KeyboardArrowUp,
+                                            contentDescription = "Вверх",
+                                            tint = if (index > 0) NeonCyan else TextMuted.copy(alpha = 0.2f),
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+
+                                    IconButton(
+                                        onClick = { onMoveConsoleDown(console.slug) },
+                                        enabled = index < consoles.size - 1,
+                                        modifier = Modifier.size(28.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.KeyboardArrowDown,
+                                            contentDescription = "Вниз",
+                                            tint = if (index < consoles.size - 1) NeonCyan else TextMuted.copy(alpha = 0.2f),
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+
+                                    Switch(
+                                        checked = console.isEnabled,
+                                        onCheckedChange = { onToggleConsole(console.slug, it) },
+                                        colors = SwitchDefaults.colors(
+                                            checkedThumbColor = OnPrimary,
+                                            checkedTrackColor = NeonCyan,
+                                            uncheckedThumbColor = TextMuted,
+                                            uncheckedTrackColor = ArcadeSurfaceContainer
+                                        ),
+                                        modifier = Modifier.scale(0.75f)
                                     )
-                                )
+                                }
                             }
                         }
                     }

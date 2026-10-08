@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
@@ -33,11 +34,53 @@ interface ConsoleDao {
     @Query("SELECT COUNT(*) FROM consoles")
     suspend fun getConsoleCount(): Int
 
-    @Query("SELECT * FROM consoles")
+    @Query("SELECT * FROM consoles ORDER BY sortOrder ASC")
     suspend fun getAllConsolesList(): List<ConsoleEntity>
 
     @Query("DELETE FROM consoles WHERE slug NOT IN (:validSlugs)")
     suspend fun retainOnlyConsoles(validSlugs: List<String>)
+
+    @Query("UPDATE consoles SET sortOrder = :sortOrder WHERE slug = :slug")
+    suspend fun updateConsoleOrder(slug: String, sortOrder: Int)
+
+    @Transaction
+    suspend fun updateConsolesOrder(orderedSlugs: List<String>) {
+        orderedSlugs.forEachIndexed { index, slug ->
+            updateConsoleOrder(slug, index)
+        }
+    }
+
+    @Transaction
+    suspend fun swapConsoleOrder(slug1: String, slug2: String) {
+        val c1 = getConsoleBySlug(slug1) ?: return
+        val c2 = getConsoleBySlug(slug2) ?: return
+        val o1 = c1.sortOrder
+        val o2 = c2.sortOrder
+        if (o1 == o2) {
+            // If sortOrder was duplicated or unassigned, normalize all
+            val all = getAllConsolesList()
+            all.forEachIndexed { idx, item ->
+                updateConsoleOrder(item.slug, idx)
+            }
+            val refreshed1 = getConsoleBySlug(slug1) ?: return
+            val refreshed2 = getConsoleBySlug(slug2) ?: return
+            updateConsoleOrder(slug1, refreshed2.sortOrder)
+            updateConsoleOrder(slug2, refreshed1.sortOrder)
+        } else {
+            updateConsoleOrder(slug1, o2)
+            updateConsoleOrder(slug2, o1)
+        }
+    }
+
+    @Transaction
+    suspend fun moveConsoleToTop(slug: String) {
+        val all = getAllConsolesList()
+        val target = all.find { it.slug == slug } ?: return
+        val reordered = listOf(target) + all.filter { it.slug != slug }
+        reordered.forEachIndexed { index, console ->
+            updateConsoleOrder(console.slug, index)
+        }
+    }
 }
 
 @Dao

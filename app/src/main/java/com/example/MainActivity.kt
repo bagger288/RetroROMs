@@ -18,9 +18,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Gamepad
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Gamepad
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -132,9 +134,9 @@ fun RetroROMsApp(viewModel: EmuLandViewModel = viewModel()) {
         }
     }
 
-    // Default select first console if none selected
+    // Default select first console if none selected or if previously selected console was disabled
     LaunchedEffect(enabledConsoles) {
-        if (selectedConsole == null && enabledConsoles.isNotEmpty()) {
+        if (enabledConsoles.isNotEmpty() && (selectedConsole == null || enabledConsoles.none { it.slug == selectedConsole?.slug })) {
             viewModel.selectConsole(enabledConsoles.first())
         }
     }
@@ -169,12 +171,15 @@ fun RetroROMsApp(viewModel: EmuLandViewModel = viewModel()) {
                     .testTag("main_navigation_bar")
             ) {
                 NavigationBarItem(
-                    selected = currentTab == 0,
-                    onClick = { viewModel.selectTab(0) },
+                    selected = currentTab == 0 && !showManageConsoles,
+                    onClick = {
+                        if (showManageConsoles) viewModel.setShowManageConsoles(false)
+                        viewModel.selectTab(0)
+                    },
                     icon = {
                         Icon(
                             painter = painterResource(
-                                id = if (currentTab == 0) R.drawable.ic_game_cartridge else R.drawable.ic_game_cartridge_outlined
+                                id = if (currentTab == 0 && !showManageConsoles) R.drawable.ic_game_cartridge else R.drawable.ic_game_cartridge_outlined
                             ),
                             contentDescription = "Каталог",
                             modifier = Modifier.size(22.dp)
@@ -192,17 +197,20 @@ fun RetroROMsApp(viewModel: EmuLandViewModel = viewModel()) {
                 )
 
                 NavigationBarItem(
-                    selected = currentTab == 1,
-                    onClick = { viewModel.selectTab(1) },
+                    selected = currentTab == 1 && !showManageConsoles,
+                    onClick = {
+                        if (showManageConsoles) viewModel.setShowManageConsoles(false)
+                        viewModel.selectTab(1)
+                    },
                     icon = {
                         Icon(
-                            imageVector = if (currentTab == 1) Icons.Default.Download else Icons.Outlined.Download,
-                            contentDescription = "Downloads"
+                            imageVector = if (currentTab == 1 && !showManageConsoles) Icons.Default.Download else Icons.Outlined.Download,
+                            contentDescription = "Загрузки"
                         )
                     },
                     label = {
                         val badge = if (activeDownloads.isNotEmpty()) " (${activeDownloads.size})" else ""
-                        Text("Downloads$badge", fontSize = 11.sp)
+                        Text("Загрузки$badge", fontSize = 11.sp)
                     },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = OnPrimary,
@@ -215,15 +223,18 @@ fun RetroROMsApp(viewModel: EmuLandViewModel = viewModel()) {
                 )
 
                 NavigationBarItem(
-                    selected = currentTab == 2,
-                    onClick = { viewModel.selectTab(2) },
+                    selected = currentTab == 2 && !showManageConsoles,
+                    onClick = {
+                        if (showManageConsoles) viewModel.setShowManageConsoles(false)
+                        viewModel.selectTab(2)
+                    },
                     icon = {
                         Icon(
-                            imageVector = if (currentTab == 2) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder,
-                            contentDescription = "Favorites"
+                            imageVector = if (currentTab == 2 && !showManageConsoles) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder,
+                            contentDescription = "Избранное"
                         )
                     },
-                    label = { Text("Favorites", fontSize = 11.sp) },
+                    label = { Text("Избранное", fontSize = 11.sp) },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = OnPrimary,
                         selectedTextColor = NeonCyan,
@@ -232,6 +243,26 @@ fun RetroROMsApp(viewModel: EmuLandViewModel = viewModel()) {
                         unselectedTextColor = TextMuted
                     ),
                     modifier = Modifier.testTag("nav_tab_favorites")
+                )
+
+                NavigationBarItem(
+                    selected = showManageConsoles,
+                    onClick = { viewModel.setShowManageConsoles(true) },
+                    icon = {
+                        Icon(
+                            imageVector = if (showManageConsoles) Icons.Default.Settings else Icons.Outlined.Settings,
+                            contentDescription = "Настройки"
+                        )
+                    },
+                    label = { Text("Настройки", fontSize = 11.sp) },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = OnPrimary,
+                        selectedTextColor = NeonCyan,
+                        indicatorColor = NeonCyan,
+                        unselectedIconColor = TextMuted,
+                        unselectedTextColor = TextMuted
+                    ),
+                    modifier = Modifier.testTag("nav_tab_settings")
                 )
             }
         }
@@ -355,6 +386,10 @@ fun RetroROMsApp(viewModel: EmuLandViewModel = viewModel()) {
             onSetAllConsoles = { isEnabled ->
                 viewModel.setAllConsolesEnabled(isEnabled)
             },
+            onMoveConsoleUp = { slug -> viewModel.moveConsoleUp(slug) },
+            onMoveConsoleDown = { slug -> viewModel.moveConsoleDown(slug) },
+            onMoveConsoleToTop = { slug -> viewModel.moveConsoleToTop(slug) },
+            onResetConsolesOrder = { viewModel.resetConsolesOrder() },
             onSelectThemeMode = { viewModel.setThemeMode(it) },
             onApplyPreset = { viewModel.applyPreset(it) },
             onUpdateColor = { target, color -> viewModel.updateCustomColor(target, color) },

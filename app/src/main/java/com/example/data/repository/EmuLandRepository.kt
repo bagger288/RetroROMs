@@ -48,7 +48,9 @@ class EmuLandRepository(
 
         val existingList = consoleDao.getAllConsolesList()
         if (existingList.isEmpty()) {
-            consoleDao.insertConsoles(defaults.map { it.toEntity() })
+            consoleDao.insertConsoles(defaults.mapIndexed { index, item ->
+                item.toEntity().copy(sortOrder = index)
+            })
             for (c in defaults.take(4)) {
                 val seedGames = scraper.getSeedGamesForConsole(c.slug, c.name, c.section)
                 if (seedGames.isNotEmpty()) {
@@ -59,18 +61,24 @@ class EmuLandRepository(
             val existingSlugs = existingList.map { it.slug }.toSet()
             val missingDefaults = defaults.filter { it.slug !in existingSlugs }
             if (missingDefaults.isNotEmpty()) {
-                consoleDao.insertConsoles(missingDefaults.map { it.toEntity() })
+                val maxOrder = existingList.maxOfOrNull { it.sortOrder } ?: 0
+                consoleDao.insertConsoles(missingDefaults.mapIndexed { idx, item ->
+                    item.toEntity().copy(sortOrder = maxOrder + 1 + idx)
+                })
             }
         }
 
-        // Try syncing real consoles from web in background while preserving user preferences
+        // Try syncing real consoles from web in background while preserving user preferences & custom order
         runCatching {
             val webConsoles = scraper.fetchConsoles()
             if (webConsoles.isNotEmpty()) {
-                val existingMap = consoleDao.getAllConsolesList().associate { it.slug to it.isEnabled }
+                val existingMap = consoleDao.getAllConsolesList().associateBy { it.slug }
                 val merged = webConsoles.map { c ->
-                    val entity = c.toEntity()
-                    entity.copy(isEnabled = existingMap[c.slug] ?: entity.isEnabled)
+                    val existing = existingMap[c.slug]
+                    c.toEntity().copy(
+                        isEnabled = existing?.isEnabled ?: c.isEnabled,
+                        sortOrder = existing?.sortOrder ?: c.order
+                    )
                 }
                 consoleDao.insertConsoles(merged)
             }
@@ -97,14 +105,58 @@ class EmuLandRepository(
         consoleDao.setAllConsolesEnabled(isEnabled)
     }
 
+    suspend fun moveConsoleUp(slug: String) = withContext(Dispatchers.IO) {
+        val list = consoleDao.getAllConsolesList()
+        val index = list.indexOfFirst { it.slug == slug }
+        if (index > 0) {
+            val prev = list[index - 1]
+            consoleDao.swapConsoleOrder(slug, prev.slug)
+        }
+    }
+
+    suspend fun moveConsoleDown(slug: String) = withContext(Dispatchers.IO) {
+        val list = consoleDao.getAllConsolesList()
+        val index = list.indexOfFirst { it.slug == slug }
+        if (index >= 0 && index < list.size - 1) {
+            val next = list[index + 1]
+            consoleDao.swapConsoleOrder(slug, next.slug)
+        }
+    }
+
+    suspend fun moveConsoleToTop(slug: String) = withContext(Dispatchers.IO) {
+        consoleDao.moveConsoleToTop(slug)
+    }
+
+    suspend fun resetConsolesOrder() = withContext(Dispatchers.IO) {
+        val defaults = scraper.getDefaultConsoles()
+        val defaultSlugs = defaults.map { it.slug }
+        val current = consoleDao.getAllConsolesList()
+        val currentMap = current.associateBy { it.slug }
+
+        var order = 0
+        defaultSlugs.forEach { slug ->
+            if (currentMap.containsKey(slug)) {
+                consoleDao.updateConsoleOrder(slug, order++)
+            }
+        }
+        current.forEach { c ->
+            if (c.slug !in defaultSlugs) {
+                consoleDao.updateConsoleOrder(c.slug, order++)
+            }
+        }
+    }
+
     suspend fun refreshConsolesFromWeb(): Result<List<ConsoleInfo>> = withContext(Dispatchers.IO) {
         try {
             val scraped = scraper.fetchConsoles()
             if (scraped.isNotEmpty()) {
-                val existingMap = consoleDao.getAllConsolesList().associate { it.slug to it.isEnabled }
+                val existingMap = consoleDao.getAllConsolesList().associateBy { it.slug }
                 val merged = scraped.map { c ->
-                    val entity = c.toEntity()
-                    entity.copy(isEnabled = existingMap[c.slug] ?: entity.isEnabled)
+                    val existing = existingMap[c.slug]
+                    c.toEntity().copy(
+                        isEnabled = existing?.isEnabled ?: c.isEnabled,
+                        sortOrder = existing?.sortOrder ?: c.order
+                    )
                 }
                 consoleDao.insertConsoles(merged)
             }
