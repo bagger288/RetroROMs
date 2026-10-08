@@ -143,7 +143,7 @@ fun ManageConsolesDialog(
                         }
                     }
                     PresetChip(text = "Reset Default") {
-                        val defaultSlugs = setOf("dendy", "genesis", "snes", "gba", "psx", "n64", "gb", "dreamcast")
+                        val defaultSlugs = setOf("dendy", "genesis", "snes", "gba", "psx", "n64", "gb", "gbc")
                         consoles.forEach {
                             onToggleConsole(it.slug, it.slug in defaultSlugs)
                         }

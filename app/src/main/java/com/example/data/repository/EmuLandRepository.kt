@@ -6,6 +6,7 @@ import com.example.data.local.ConsoleEntity
 import com.example.data.local.DownloadEntity
 import com.example.data.local.GameEntity
 import com.example.data.remote.EmuLandScraper
+import com.example.model.CatalogCategory
 import com.example.model.ConsoleInfo
 import com.example.model.DownloadExecutionResult
 import com.example.model.DownloadRecord
@@ -27,6 +28,7 @@ class EmuLandRepository(
     private val scraper: EmuLandScraper,
     private val downloader: RomDownloader
 ) {
+
     private val consoleDao = database.consoleDao()
     private val gameDao = database.gameDao()
     private val downloadDao = database.downloadDao()
@@ -38,17 +40,26 @@ class EmuLandRepository(
     }
 
     private suspend fun initDefaultDataIfNeeded() {
-        val existingCount = consoleDao.getConsoleCount()
-        if (existingCount == 0) {
-            val defaults = scraper.getDefaultConsoles()
-            consoleDao.insertConsoles(defaults.map { it.toEntity() })
+        val defaults = scraper.getDefaultConsoles()
+        val validSlugs = defaults.map { it.slug }
+        // Clean up any previously stored consoles without ROMs (e.g. nds, psp, dreamcast, ps2, etc.)
+        consoleDao.retainOnlyConsoles(validSlugs)
+        gameDao.deleteGamesForInvalidConsoles(validSlugs)
 
-            // Pre-seed popular games for first few consoles
-            for (c in defaults.take(3)) {
+        val existingList = consoleDao.getAllConsolesList()
+        if (existingList.isEmpty()) {
+            consoleDao.insertConsoles(defaults.map { it.toEntity() })
+            for (c in defaults.take(4)) {
                 val seedGames = scraper.getSeedGamesForConsole(c.slug, c.name, c.section)
                 if (seedGames.isNotEmpty()) {
                     gameDao.insertGames(seedGames.map { it.toEntity() })
                 }
+            }
+        } else {
+            val existingSlugs = existingList.map { it.slug }.toSet()
+            val missingDefaults = defaults.filter { it.slug !in existingSlugs }
+            if (missingDefaults.isNotEmpty()) {
+                consoleDao.insertConsoles(missingDefaults.map { it.toEntity() })
             }
         }
 
@@ -101,6 +112,10 @@ class EmuLandRepository(
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    fun getInitialCategoriesForConsole(slug: String): List<CatalogCategory> {
+        return scraper.getInitialCategoriesForConsole(slug)
     }
 
     fun getGamesForConsole(slug: String): Flow<List<GameCard>> {

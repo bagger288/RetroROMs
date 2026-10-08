@@ -35,6 +35,9 @@ interface ConsoleDao {
 
     @Query("SELECT * FROM consoles")
     suspend fun getAllConsolesList(): List<ConsoleEntity>
+
+    @Query("DELETE FROM consoles WHERE slug NOT IN (:validSlugs)")
+    suspend fun retainOnlyConsoles(validSlugs: List<String>)
 }
 
 @Dao
@@ -62,6 +65,9 @@ interface GameDao {
 
     @Query("SELECT id FROM games WHERE isDownloaded = 1")
     suspend fun getDownloadedGameIds(): List<String>
+
+    @Query("DELETE FROM games WHERE consoleSlug NOT IN (:validSlugs)")
+    suspend fun deleteGamesForInvalidConsoles(validSlugs: List<String>)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertGames(games: List<GameEntity>)

@@ -8,6 +8,7 @@ import com.example.data.downloader.RomDownloader
 import com.example.data.local.AppDatabase
 import com.example.data.remote.EmuLandScraper
 import com.example.data.repository.EmuLandRepository
+import com.example.model.CatalogCategory
 import com.example.model.ConsoleInfo
 import com.example.model.DownloadExecutionResult
 import com.example.model.DownloadRecord
@@ -76,6 +77,10 @@ class EmuLandViewModel(application: Application) : AndroidViewModel(application)
 
     private val _selectedConsole = MutableStateFlow<ConsoleInfo?>(null)
     val selectedConsole: StateFlow<ConsoleInfo?> = _selectedConsole.asStateFlow()
+
+    // Available categories dynamically derived from console or pagelist_top
+    private val _availableCategories = MutableStateFlow<List<CatalogCategory>>(emptyList())
+    val availableCategories: StateFlow<List<CatalogCategory>> = _availableCategories.asStateFlow()
 
     // Sub-category: "top" (Popular), "best" (Best Rated), or alphabetical ("0-9", "a", "b", etc.)
     private val _selectedCategory = MutableStateFlow("top")
@@ -288,9 +293,17 @@ class EmuLandViewModel(application: Application) : AndroidViewModel(application)
     fun selectConsole(console: ConsoleInfo) {
         _selectedConsole.value = console
         _searchQuery.value = ""
-        _selectedCategory.value = "top"
+        val initialCats = repository.getInitialCategoriesForConsole(console.slug)
+        _availableCategories.value = initialCats
+        val targetCat = when {
+            initialCats.any { it.key.equals("top", ignoreCase = true) } -> "top"
+            initialCats.any { it.key.equals("best", ignoreCase = true) } -> "best"
+            initialCats.isNotEmpty() -> initialCats.first().key
+            else -> "all"
+        }
+        _selectedCategory.value = targetCat
         _currentPage.value = 1
-        loadCatalogGames(console, "top", 1, append = false)
+        loadCatalogGames(console, targetCat, 1, append = false)
     }
 
     fun selectCategory(category: String) {
@@ -349,6 +362,10 @@ class EmuLandViewModel(application: Application) : AndroidViewModel(application)
                     _totalPages.value = pageResult.totalPages.coerceAtLeast(1)
                     _hasNextPage.value = pageResult.hasNextPage || (pageResult.currentPage < pageResult.totalPages)
                     _hasPrevPage.value = pageResult.currentPage > 1
+
+                    if (pageResult.availableCategories.isNotEmpty()) {
+                        _availableCategories.value = pageResult.availableCategories
+                    }
 
                     if (append) {
                         _currentCatalogGames.value = (_currentCatalogGames.value + pageResult.games).distinctBy { it.id }

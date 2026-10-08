@@ -81,6 +81,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
+import com.example.model.CatalogCategory
 import com.example.model.ConsoleInfo
 import com.example.model.GameCard
 import com.example.ui.components.FullScreenImageDialog
@@ -107,6 +108,7 @@ fun HomeScreen(
     enabledConsoles: List<ConsoleInfo>,
     selectedConsole: ConsoleInfo?,
     selectedCategory: String,
+    categories: List<CatalogCategory> = emptyList(),
     currentPage: Int,
     totalPages: Int = 1,
     hasNextPage: Boolean = false,
@@ -172,17 +174,6 @@ fun HomeScreen(
             gridState.scrollToItem(0)
         }
     }
-
-    val categories = listOf(
-        "top" to "🔥 Популярные",
-        "best" to "★ Лучшие",
-        "0-9" to "0-9",
-        "a" to "A", "b" to "B", "c" to "C", "d" to "D", "e" to "E",
-        "f" to "F", "g" to "G", "h" to "H", "i" to "I", "j" to "J",
-        "k" to "K", "l" to "L", "m" to "M", "n" to "N", "o" to "O",
-        "p" to "P", "q" to "Q", "r" to "R", "s" to "S", "t" to "T",
-        "u" to "U", "v" to "V", "w" to "W", "x" to "X", "y" to "Y", "z" to "Z"
-    )
 
     val isSearchMode = searchQuery.isNotBlank()
 
@@ -616,35 +607,37 @@ fun HomeScreen(
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    // Sub-Category / Alphabetical Filter Row ("Популярное", "Лучшие", etc.)
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        categories.forEach { (catKey, catLabel) ->
-                            val isCatSelected = selectedCategory.equals(catKey, ignoreCase = true)
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(if (isCatSelected) GoldenAmber else ArcadeSurfaceContainer)
-                                    .border(1.dp, if (isCatSelected) GoldenAmber else ArcadeCardBorder, RoundedCornerShape(8.dp))
-                                    .clickable { onSelectCategory(catKey) }
-                                    .padding(horizontal = 9.dp, vertical = 5.dp)
-                            ) {
-                                Text(
-                                    text = catLabel,
-                                    color = if (isCatSelected) OnPrimary else TextPrimary,
-                                    fontSize = 11.sp,
-                                    fontWeight = if (isCatSelected) FontWeight.Bold else FontWeight.Medium
-                                )
+                    if (categories.size > 1) {
+                        // Sub-Category / Alphabetical Filter Row ("Популярное", "Лучшие", etc.)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            categories.forEach { cat ->
+                                val isCatSelected = selectedCategory.equals(cat.key, ignoreCase = true)
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(if (isCatSelected) GoldenAmber else ArcadeSurfaceContainer)
+                                        .border(1.dp, if (isCatSelected) GoldenAmber else ArcadeCardBorder, RoundedCornerShape(8.dp))
+                                        .clickable { onSelectCategory(cat.key) }
+                                        .padding(horizontal = 9.dp, vertical = 5.dp)
+                                ) {
+                                    Text(
+                                        text = cat.label,
+                                        color = if (isCatSelected) OnPrimary else TextPrimary,
+                                        fontSize = 11.sp,
+                                        fontWeight = if (isCatSelected) FontWeight.Bold else FontWeight.Medium
+                                    )
+                                }
                             }
                         }
-                    }
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
                 }
             }
 
@@ -655,7 +648,8 @@ fun HomeScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 val activeConsoleName = (selectedConsole ?: enabledConsoles.firstOrNull())?.shortName ?: "Игры"
-                val categoryName = categories.firstOrNull { it.first.equals(selectedCategory, ignoreCase = true) }?.second ?: selectedCategory
+                val categoryName = categories.firstOrNull { it.key.equals(selectedCategory, ignoreCase = true) }?.label
+                    ?: if (selectedCategory.equals("all", ignoreCase = true)) "Все игры" else selectedCategory
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = if (isSearchMode) "Результаты поиска (${games.size})" else "$activeConsoleName • $categoryName (${games.size})",

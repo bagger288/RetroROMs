@@ -71,11 +71,17 @@ data class DownloadRecord(
     val errorMessage: String? = null
 )
 
+data class CatalogCategory(
+    val key: String,
+    val label: String
+)
+
 data class GamesPageResult(
     val games: List<GameCard>,
     val currentPage: Int = 1,
     val totalPages: Int = 1,
-    val hasNextPage: Boolean = false
+    val hasNextPage: Boolean = false,
+    val availableCategories: List<CatalogCategory> = emptyList()
 )
 
 data class ZipRomEntry(

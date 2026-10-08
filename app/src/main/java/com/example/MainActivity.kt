@@ -90,6 +90,7 @@ fun RetroROMsApp(viewModel: EmuLandViewModel = viewModel()) {
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
     val selectedSort by viewModel.selectedSort.collectAsStateWithLifecycle()
     val selectedCategory by viewModel.selectedCategory.collectAsStateWithLifecycle()
+    val availableCategories by viewModel.availableCategories.collectAsStateWithLifecycle()
     val currentPage by viewModel.currentPage.collectAsStateWithLifecycle()
     val totalPages by viewModel.totalPages.collectAsStateWithLifecycle()
     val hasNextPage by viewModel.hasNextPage.collectAsStateWithLifecycle()
@@ -246,6 +247,7 @@ fun RetroROMsApp(viewModel: EmuLandViewModel = viewModel()) {
                         enabledConsoles = enabledConsoles,
                         selectedConsole = selectedConsole,
                         selectedCategory = selectedCategory,
+                        categories = availableCategories,
                         currentPage = currentPage,
                         totalPages = totalPages,
                         hasNextPage = hasNextPage,
