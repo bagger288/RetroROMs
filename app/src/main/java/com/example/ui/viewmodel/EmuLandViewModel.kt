@@ -1,6 +1,9 @@
 package com.example.ui.viewmodel
 
 import android.app.Application
+import android.content.ActivityNotFoundException
+import android.content.ClipData
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -126,26 +129,41 @@ class EmuLandViewModel(application: Application) : AndroidViewModel(application)
         Triple(query, results, platform)
     }
 
+    // Downloads
+    val downloadRecords: StateFlow<List<DownloadRecord>> = repository.getAllDownloads()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     // Games state
     val displayedGames: StateFlow<List<GameCard>> = combine(
         _currentCatalogGames,
         _searchCriteria,
         _selectedSort,
-        repository.getFavorites()
-    ) { catalogList, searchTuple, sort, favorites ->
+        repository.getFavorites(),
+        downloadRecords
+    ) { catalogList, searchTuple, sort, favorites, downloads ->
         val query = searchTuple.first
         val searchList = searchTuple.second
         val platformFilter = searchTuple.third
         val favIds = favorites.map { it.id }.toSet()
+        val completedDownloads = downloads.filter { it.status == com.example.model.DownloadStatus.COMPLETED }
+        val downloadedIds = completedDownloads.map { it.gameId }.toSet()
+        val downloadedTitles = completedDownloads.map { it.gameTitle.lowercase().trim() }.toSet()
+
         val explicitList = if (query.isNotBlank()) {
             val filtered = if (platformFilter != null) {
                 searchList.filter { it.consoleSlug.equals(platformFilter, ignoreCase = true) }
             } else {
                 searchList
             }
-            filtered.map { it.copy(isFavorite = it.id in favIds) }
+            filtered.map {
+                val isDown = it.id in downloadedIds || it.title.lowercase().trim() in downloadedTitles
+                it.copy(isFavorite = it.id in favIds, isDownloaded = isDown)
+            }
         } else {
-            catalogList.map { it.copy(isFavorite = it.id in favIds) }
+            catalogList.map {
+                val isDown = it.id in downloadedIds || it.title.lowercase().trim() in downloadedTitles
+                it.copy(isFavorite = it.id in favIds, isDownloaded = isDown)
+            }
         }
 
         when (sort) {
@@ -156,12 +174,18 @@ class EmuLandViewModel(application: Application) : AndroidViewModel(application)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // Favorites
-    val favoriteGames: StateFlow<List<GameCard>> = repository.getFavorites()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    // Downloads
-    val downloadRecords: StateFlow<List<DownloadRecord>> = repository.getAllDownloads()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val favoriteGames: StateFlow<List<GameCard>> = combine(
+        repository.getFavorites(),
+        downloadRecords
+    ) { favorites, downloads ->
+        val completedDownloads = downloads.filter { it.status == com.example.model.DownloadStatus.COMPLETED }
+        val downloadedIds = completedDownloads.map { it.gameId }.toSet()
+        val downloadedTitles = completedDownloads.map { it.gameTitle.lowercase().trim() }.toSet()
+        favorites.map {
+            val isDown = it.id in downloadedIds || it.title.lowercase().trim() in downloadedTitles
+            it.copy(isFavorite = true, isDownloaded = isDown)
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // Active downloading states
     private val _activeDownloads = MutableStateFlow<Map<String, DownloadProgressState>>(emptyMap())
@@ -704,42 +728,110 @@ class EmuLandViewModel(application: Application) : AndroidViewModel(application)
 
             val pm = context.packageManager
             val retroArchPackages = listOf(
-                "com.retroarch",
                 "com.retroarch.aarch64",
+                "com.retroarch",
                 "com.retroarch.ra32"
             )
-            val installedPackage = retroArchPackages.firstOrNull { pkg ->
+
+            // Detect installed package via getPackageInfo or getLaunchIntentForPackage
+            val detectedPackage = retroArchPackages.firstOrNull { pkg ->
                 try {
                     pm.getPackageInfo(pkg, 0)
                     true
                 } catch (_: Exception) {
-                    false
+                    try {
+                        pm.getLaunchIntentForPackage(pkg) != null
+                    } catch (_: Exception) {
+                        false
+                    }
+                }
+            } ?: try {
+                pm.getInstalledApplications(0)
+                    .firstOrNull { it.packageName.contains("retroarch", ignoreCase = true) }
+                    ?.packageName
+            } catch (_: Exception) { null }
+
+            val packagesToTry = if (detectedPackage != null) {
+                listOf(detectedPackage) + (retroArchPackages - detectedPackage)
+            } else {
+                retroArchPackages
+            }
+
+            val contentUri = try {
+                FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.fileprovider",
+                    file
+                )
+            } catch (e: Exception) {
+                Log.w("RetroArch", "Failed to get FileProvider URI: ${e.message}")
+                Uri.fromFile(file)
+            }
+
+            var launched = false
+
+            for (pkg in packagesToTry) {
+                // RetroArch entry point activities used by launchers and frontends
+                val candidateComponents = listOf(
+                    ComponentName(pkg, "com.retroarch.browser.retroactivity.RetroActivityFuture"),
+                    ComponentName(pkg, "$pkg.browser.retroactivity.RetroActivityFuture"),
+                    ComponentName(pkg, "com.retroarch.browser.retroactivity.RetroActivity"),
+                    ComponentName(pkg, "$pkg.browser.retroactivity.RetroActivity"),
+                    ComponentName(pkg, "com.retroarch.browser.mainmenu.MainMenuActivity")
+                )
+
+                for (comp in candidateComponents) {
+                    try {
+                        val intent = Intent(Intent.ACTION_MAIN).apply {
+                            component = comp
+                            putExtra("ROM", file.absolutePath)
+                            putExtra("PATH", file.absolutePath)
+                            putExtra("CONFIGFILE", "/storage/emulated/0/Android/data/$pkg/files/retroarch.cfg")
+                            data = contentUri
+                            clipData = ClipData.newRawUri("ROM", contentUri)
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+                        }
+                        context.startActivity(intent)
+                        launched = true
+                        _userMessage.emit("Запуск ${game.title} в RetroArch…")
+                        break
+                    } catch (_: ActivityNotFoundException) {
+                        // Component not found in this package, continue
+                    } catch (e: Exception) {
+                        Log.w("RetroArch", "Failed launch component $comp: ${e.message}")
+                    }
+                }
+
+                if (launched) break
+
+                // Fallback: package launch intent with ROM extra
+                try {
+                    val launchIntent = pm.getLaunchIntentForPackage(pkg)?.apply {
+                        putExtra("ROM", file.absolutePath)
+                        putExtra("PATH", file.absolutePath)
+                        data = contentUri
+                        clipData = ClipData.newRawUri("ROM", contentUri)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    if (launchIntent != null) {
+                        context.startActivity(launchIntent)
+                        launched = true
+                        _userMessage.emit("Запуск ${game.title} в RetroArch…")
+                        break
+                    }
+                } catch (e: Exception) {
+                    Log.w("RetroArch", "Failed launch intent for $pkg: ${e.message}")
                 }
             }
 
-            if (installedPackage != null) {
-                try {
-                    val contentUri = FileProvider.getUriForFile(
-                        context,
-                        "${context.packageName}.fileprovider",
-                        file
-                    )
-                    val intent = Intent(Intent.ACTION_VIEW).apply {
-                        setDataAndType(contentUri, "application/octet-stream")
-                        setPackage(installedPackage)
-                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-                        putExtra("ROM", file.absolutePath)
-                        putExtra("PATH", file.absolutePath)
-                    }
-                    context.startActivity(intent)
-                    _userMessage.emit("Запуск ${game.title} в RetroArch…")
-                } catch (e: Exception) {
-                    Log.e("RetroArch", "Failed to launch game: ${e.message}", e)
+            if (!launched) {
+                if (detectedPackage == null) {
+                    _installRetroArchPromptGame.value = game
+                } else {
                     openInOtherEmulator(context, game)
                 }
-            } else {
-                // RetroArch is not installed
-                _installRetroArchPromptGame.value = game
             }
         }
     }
@@ -770,8 +862,10 @@ class EmuLandViewModel(application: Application) : AndroidViewModel(application)
                     file
                 )
                 val intent = Intent(Intent.ACTION_VIEW).apply {
-                    setDataAndType(contentUri, "application/octet-stream")
-                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+                    setDataAndType(contentUri, "*/*")
+                    clipData = ClipData.newRawUri("ROM", contentUri)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
                 val chooser = Intent.createChooser(intent, "Открыть игру с помощью…").apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)

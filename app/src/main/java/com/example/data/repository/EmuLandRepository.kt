@@ -251,8 +251,11 @@ class EmuLandRepository(
 
     suspend fun loadFullGameDetails(game: GameCard): GameCard = withContext(Dispatchers.IO) {
         val enhanced = scraper.fetchGameCardDetails(game)
-        gameDao.insertGame(enhanced.toEntity())
-        enhanced
+        val isDownloaded = game.isDownloaded || (downloadDao.getDownloadByGameId(game.id)?.status == com.example.model.DownloadStatus.COMPLETED.name)
+            || (downloadDao.getDownloadByGameTitle(game.title)?.status == com.example.model.DownloadStatus.COMPLETED.name)
+        val result = enhanced.copy(isFavorite = game.isFavorite, isDownloaded = isDownloaded)
+        gameDao.insertGame(result.toEntity())
+        result
     }
 
     fun getCustomFolderUri(): String? = downloader.getCustomFolderUri()

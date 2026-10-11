@@ -357,9 +357,13 @@ fun RetroROMsApp(viewModel: EmuLandViewModel = viewModel()) {
     }
 
     // Modal Game Detail Bottom Sheet
-    selectedGameForDetail?.let { game ->
-        val folder = enabledConsoles.find { it.slug == game.consoleSlug }?.folderName
-            ?: game.consoleName.replace("/", "_")
+    selectedGameForDetail?.let { selectedGame ->
+        val folder = enabledConsoles.find { it.slug == selectedGame.consoleSlug }?.folderName
+            ?: selectedGame.consoleName.replace("/", "_")
+        val isGameDownloaded = selectedGame.isDownloaded || downloadRecords.any {
+            it.status == com.example.model.DownloadStatus.COMPLETED && (it.gameId == selectedGame.id || it.gameTitle.equals(selectedGame.title, ignoreCase = true))
+        }
+        val game = if (isGameDownloaded != selectedGame.isDownloaded) selectedGame.copy(isDownloaded = isGameDownloaded) else selectedGame
 
         GameDetailSheet(
             game = game,

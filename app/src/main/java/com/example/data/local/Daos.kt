@@ -139,6 +139,9 @@ interface DownloadDao {
     @Query("SELECT * FROM downloads WHERE gameId = :gameId ORDER BY timestamp DESC LIMIT 1")
     suspend fun getDownloadByGameId(gameId: String): DownloadEntity?
 
+    @Query("SELECT * FROM downloads WHERE gameTitle = :title ORDER BY timestamp DESC LIMIT 1")
+    suspend fun getDownloadByGameTitle(title: String): DownloadEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertDownload(download: DownloadEntity): Long
 

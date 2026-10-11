@@ -541,6 +541,7 @@ class RomDownloader(
     suspend fun findDownloadedGameFile(game: GameCard): File? = withContext(Dispatchers.IO) {
         // 1. Check last download record in DB
         val record = downloadDao.getDownloadByGameId(game.id)
+            ?: downloadDao.getDownloadByGameTitle(game.title)
         if (record != null) {
             val direct = File(record.targetDirectory)
             if (direct.exists() && direct.isFile) return@withContext direct
