@@ -22,10 +22,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ColorLens
 import androidx.compose.material.icons.filled.DarkMode
@@ -34,7 +37,9 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.filled.VerticalAlignTop
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -63,6 +68,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -79,6 +85,7 @@ import com.example.ui.theme.ArcadeSurfaceVariant
 import com.example.ui.theme.CatalogViewMode
 import com.example.ui.theme.DefaultDarkTheme
 import com.example.ui.theme.DefaultLightTheme
+import com.example.ui.theme.EmeraldGreen
 import com.example.ui.theme.GoldenAmber
 import com.example.ui.theme.NeonCyan
 import com.example.ui.theme.OnPrimary
@@ -120,9 +127,11 @@ fun SettingsDialog(
     onApplyPreset: (ThemePreset) -> Unit,
     onUpdateColor: (ColorTarget, Color) -> Unit,
     onResetColors: () -> Unit,
+    isPlayInRetroArchEnabled: Boolean = false,
+    onTogglePlayInRetroArch: (Boolean) -> Unit = {},
     onDismiss: () -> Unit
 ) {
-    var selectedTab by remember { mutableIntStateOf(0) } // 0: Платформы, 1: Тема и цвета
+    var selectedTab by remember { mutableIntStateOf(0) } // 0: Платформы, 1: Тема, 2: Эмуляция
     var activeColorTarget by remember { mutableStateOf(ColorTarget.PRIMARY) }
 
     val quickColors = listOf(
@@ -166,7 +175,11 @@ fun SettingsDialog(
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                imageVector = if (selectedTab == 0) Icons.Default.Gamepad else Icons.Default.Palette,
+                                imageVector = when (selectedTab) {
+                                    0 -> Icons.Default.Gamepad
+                                    1 -> Icons.Default.Palette
+                                    else -> Icons.Default.SportsEsports
+                                },
                                 contentDescription = null,
                                 tint = NeonCyan,
                                 modifier = Modifier.size(20.dp)
@@ -181,7 +194,11 @@ fun SettingsDialog(
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = "Платформы и внешний вид",
+                                text = when (selectedTab) {
+                                    0 -> "Платформы и порядок"
+                                    1 -> "Внешний вид и цвета"
+                                    else -> "Запуск в эмуляторах"
+                                },
                                 color = TextMuted,
                                 fontSize = 11.sp
                             )
@@ -206,7 +223,7 @@ fun SettingsDialog(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Tabs: Платформы vs Тема и Цвета
+                // Tabs: Платформы vs Тема vs Эмуляция
                 TabRow(
                     selectedTabIndex = selectedTab,
                     containerColor = ArcadeSurfaceVariant,
@@ -227,9 +244,9 @@ fun SettingsDialog(
                         onClick = { selectedTab = 0 },
                         text = {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Gamepad, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Платформы (${consoles.count { it.isEnabled }})", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                Icon(Icons.Default.Gamepad, contentDescription = null, modifier = Modifier.size(15.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Платформы", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                             }
                         }
                     )
@@ -238,9 +255,20 @@ fun SettingsDialog(
                         onClick = { selectedTab = 1 },
                         text = {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Palette, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Тема и Цвета", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                Icon(Icons.Default.Palette, contentDescription = null, modifier = Modifier.size(15.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Тема", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            }
+                        }
+                    )
+                    Tab(
+                        selected = selectedTab == 2,
+                        onClick = { selectedTab = 2 },
+                        text = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.SportsEsports, contentDescription = null, modifier = Modifier.size(15.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Эмуляция", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                             }
                         }
                     )
@@ -460,7 +488,7 @@ fun SettingsDialog(
                         }
                     }
 
-                } else {
+                } else if (selectedTab == 1) {
                     // TAB 1: THEME & COLOR PICKER
                     Column(
                         modifier = Modifier
@@ -808,6 +836,199 @@ fun SettingsDialog(
                                 onUpdateColor(activeColorTarget, updated)
                             }
                         )
+                    }
+                } else {
+                    // TAB 2: RETROARCH & EMULATION SETTINGS
+                    val context = LocalContext.current
+                    val pm = context.packageManager
+                    val isRetroArchInstalled = remember {
+                        listOf("com.retroarch", "com.retroarch.aarch64", "com.retroarch.ra32").any { pkg ->
+                            try {
+                                pm.getPackageInfo(pkg, 0)
+                                true
+                            } catch (_: Exception) {
+                                false
+                            }
+                        }
+                    }
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        Text(
+                            text = "ИНТЕГРАЦИЯ С ЭМУЛЯТОРАМИ",
+                            color = GoldenAmber,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.5.sp
+                        )
+
+                        // Main Switch Card
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(ArcadeSurfaceVariant)
+                                .border(
+                                    1.dp,
+                                    if (isPlayInRetroArchEnabled) EmeraldGreen.copy(alpha = 0.6f) else ArcadeCardBorder,
+                                    RoundedCornerShape(14.dp)
+                                )
+                                .padding(14.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(42.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(if (isPlayInRetroArchEnabled) EmeraldGreen.copy(alpha = 0.15f) else ArcadeSurfaceContainer),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.PlayArrow,
+                                        contentDescription = null,
+                                        tint = if (isPlayInRetroArchEnabled) EmeraldGreen else TextMuted,
+                                        modifier = Modifier.size(26.dp)
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.width(12.dp))
+
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Запуск скачанных игр в RetroArch",
+                                        color = TextPrimary,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = "При включении кнопка скачивания на карточках игр меняется на зеленую кнопку «Play» для мгновенного запуска РОМа в эмуляторе.",
+                                        color = TextSecondary,
+                                        fontSize = 11.5.sp,
+                                        lineHeight = 15.sp
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.width(8.dp))
+
+                                Switch(
+                                    checked = isPlayInRetroArchEnabled,
+                                    onCheckedChange = onTogglePlayInRetroArch,
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = OnPrimary,
+                                        checkedTrackColor = EmeraldGreen,
+                                        uncheckedThumbColor = TextMuted,
+                                        uncheckedTrackColor = ArcadeSurfaceContainer
+                                    )
+                                )
+                            }
+                        }
+
+                        // RetroArch Status Card
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(ArcadeSurfaceVariant)
+                                .border(1.dp, ArcadeCardBorder, RoundedCornerShape(14.dp))
+                                .padding(14.dp)
+                        ) {
+                            Column {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = if (isRetroArchInstalled) Icons.Default.CheckCircle else Icons.Default.Gamepad,
+                                            contentDescription = null,
+                                            tint = if (isRetroArchInstalled) EmeraldGreen else GoldenAmber,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = if (isRetroArchInstalled) "RetroArch установлен" else "RetroArch не найден",
+                                            color = TextPrimary,
+                                            fontSize = 13.5.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+
+                                    if (!isRetroArchInstalled) {
+                                        Text(
+                                            text = "Установить",
+                                            color = NeonCyan,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(6.dp))
+                                                .background(NeonCyan.copy(alpha = 0.15f))
+                                                .clickable {
+                                                    try {
+                                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=com.retroarch")).apply {
+                                                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                                        }
+                                                        context.startActivity(intent)
+                                                    } catch (_: Exception) {
+                                                        val web = Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=com.retroarch")).apply {
+                                                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                                        }
+                                                        context.startActivity(web)
+                                                    }
+                                                }
+                                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = if (isRetroArchInstalled) {
+                                        "Приложение автоматически передаст РОМ-файл через защищенный FileProvider с передачей прав на чтение."
+                                    } else {
+                                        "Для запуска игр рекомендуется установить официальный RetroArch или RetroArch Plus из Google Play."
+                                    },
+                                    color = TextMuted,
+                                    fontSize = 11.5.sp,
+                                    lineHeight = 15.sp
+                                )
+                            }
+                        }
+
+                        // Help & Tips Card
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(ArcadeSurfaceContainer)
+                                .border(1.dp, ArcadeCardBorder.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
+                                .padding(14.dp)
+                        ) {
+                            Column {
+                                Text(
+                                    text = "Как это работает:",
+                                    color = GoldenAmber,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "• Работает как в режиме Сетки, так и в режиме Списка.\n• На скачанных играх кнопка меняется на зеленую ▶ (без текста).\n• Если RetroArch не установлен, приложение предложит скачать его или открыть в другом эмуляторе.",
+                                    color = TextSecondary,
+                                    fontSize = 11.5.sp,
+                                    lineHeight = 16.sp
+                                )
+                            }
+                        }
                     }
                 }
 

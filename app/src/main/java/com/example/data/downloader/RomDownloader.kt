@@ -71,6 +71,14 @@ class RomDownloader(
         prefs.edit().putBoolean("delete_zip_after_unpack", enabled).apply()
     }
 
+    fun isLaunchInRetroArch(): Boolean {
+        return prefs.getBoolean("launch_in_retroarch", false)
+    }
+
+    fun setLaunchInRetroArch(enabled: Boolean) {
+        prefs.edit().putBoolean("launch_in_retroarch", enabled).apply()
+    }
+
     private fun sanitizeFileName(name: String, extension: String = ".zip"): String {
         val clean = name.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim()
         return if (clean.endsWith(extension, ignoreCase = true)) clean else "$clean$extension"
@@ -384,7 +392,7 @@ class RomDownloader(
                         tempFile.delete()
                     }
 
-                    downloadDao.updateProgress(recordId, DownloadStatus.COMPLETED.name, downloadedBytes, downloadedBytes)
+                    downloadDao.updateCompletion(recordId, DownloadStatus.COMPLETED.name, downloadedBytes, downloadedBytes, simpleName, outStreamAndPath.second)
                     gameDao.setDownloaded(game.id, true)
                     Log.d("RomDownloader", "Extracted single ROM: $simpleName to ${outStreamAndPath.second}")
                     return@withContext DownloadExecutionResult.Completed(
@@ -425,7 +433,7 @@ class RomDownloader(
         }
         tempFile.delete()
 
-        downloadDao.updateProgress(recordId, DownloadStatus.COMPLETED.name, downloadedBytes, downloadedBytes)
+        downloadDao.updateCompletion(recordId, DownloadStatus.COMPLETED.name, downloadedBytes, downloadedBytes, fileName, outStreamAndPath.second)
         gameDao.setDownloaded(game.id, true)
         Log.d("RomDownloader", "Successfully saved: ${outStreamAndPath.second}")
         DownloadExecutionResult.Completed(
@@ -509,7 +517,7 @@ class RomDownloader(
             tempFile.delete()
 
             val totalSize = tempFile.length()
-            downloadDao.updateProgress(request.recordId, DownloadStatus.COMPLETED.name, totalSize, totalSize)
+            downloadDao.updateCompletion(request.recordId, DownloadStatus.COMPLETED.name, totalSize, totalSize, fileName, outStreamAndPath.second)
             gameDao.setDownloaded(request.game.id, true)
             Result.success(outStreamAndPath.second)
         } catch (e: Exception) {
@@ -525,6 +533,97 @@ class RomDownloader(
             File(request.tempZipPath).delete()
         } catch (_: Exception) {}
         downloadDao.updateProgress(request.recordId, DownloadStatus.CANCELLED.name, 0, 0)
+    }
+
+    /**
+     * Resolves the downloaded ROM file on local disk for a game.
+     */
+    suspend fun findDownloadedGameFile(game: GameCard): File? = withContext(Dispatchers.IO) {
+        // 1. Check last download record in DB
+        val record = downloadDao.getDownloadByGameId(game.id)
+        if (record != null) {
+            val direct = File(record.targetDirectory)
+            if (direct.exists() && direct.isFile) return@withContext direct
+            val combo = File(record.targetDirectory, record.fileName)
+            if (combo.exists() && combo.isFile) return@withContext combo
+
+            // Check if targetDirectory is a directory
+            if (direct.exists() && direct.isDirectory) {
+                val candidate = direct.listFiles()?.firstOrNull { it.isFile && !it.name.endsWith(".tmp") }
+                if (candidate != null) return@withContext candidate
+            }
+        }
+
+        val consoleFolder = getConsoleFolderBySlug(game.consoleSlug)
+        val cleanTitle = game.title.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim()
+
+        // 2. Check public /sdcard/Download/RetroROMs/<consoleFolder>/
+        val publicDownloads = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        val retroDir = File(publicDownloads, "RetroROMs/$consoleFolder")
+        if (retroDir.exists() && retroDir.isDirectory) {
+            val files = retroDir.listFiles()?.filter { it.isFile && !it.name.endsWith(".tmp") } ?: emptyList()
+            val match = files.firstOrNull { f ->
+                val base = f.nameWithoutExtension
+                base.equals(cleanTitle, ignoreCase = true) ||
+                base.startsWith(cleanTitle, ignoreCase = true) ||
+                cleanTitle.startsWith(base, ignoreCase = true)
+            } ?: files.firstOrNull { it.name.contains(cleanTitle, ignoreCase = true) }
+            if (match != null) return@withContext match
+        }
+
+        // 3. Check fallback app-specific external files dir
+        val fallbackDir = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "RetroROMs/$consoleFolder")
+        if (fallbackDir.exists() && fallbackDir.isDirectory) {
+            val files = fallbackDir.listFiles()?.filter { it.isFile && !it.name.endsWith(".tmp") } ?: emptyList()
+            val match = files.firstOrNull { f ->
+                val base = f.nameWithoutExtension
+                base.equals(cleanTitle, ignoreCase = true) ||
+                base.startsWith(cleanTitle, ignoreCase = true) ||
+                cleanTitle.startsWith(base, ignoreCase = true)
+            } ?: files.firstOrNull { it.name.contains(cleanTitle, ignoreCase = true) }
+            if (match != null) return@withContext match
+        }
+
+        null
+    }
+
+    fun getConsoleFolderBySlug(slug: String): String {
+        return when (slug.lowercase()) {
+            "dendy" -> "NES"
+            "genesis" -> "MegaDrive"
+            "snes" -> "SNES"
+            "gba" -> "GBA"
+            "gb" -> "GameBoy"
+            "gbc" -> "GBC"
+            "psx" -> "PS1"
+            "n64" -> "N64"
+            "32x" -> "Sega32X"
+            "segacd" -> "SegaCD"
+            "sms" -> "SMS"
+            "sg-1000" -> "SG1000"
+            "pce" -> "PCEngine"
+            "pcecd" -> "PCEngineCD"
+            "3do" -> "3DO"
+            "famicom_disk_system" -> "FDS"
+            "neogeocd" -> "NeoGeoCD"
+            "jaguar" -> "Jaguar"
+            "gg" -> "GameGear"
+            "lynx" -> "Lynx"
+            "ngp" -> "NGP"
+            "ws" -> "WonderSwan"
+            "vboy" -> "VirtualBoy"
+            "pmini" -> "PokeMini"
+            "sv" -> "Supervision"
+            "2600" -> "Atari2600"
+            "5200" -> "Atari5200"
+            "7800" -> "Atari7800"
+            "coleco" -> "ColecoVision"
+            "vectrex" -> "Vectrex"
+            "intellivision" -> "Intellivision"
+            "arcadia" -> "Arcadia"
+            "chaf" -> "ChannelF"
+            else -> slug.uppercase()
+        }
     }
 
     /**

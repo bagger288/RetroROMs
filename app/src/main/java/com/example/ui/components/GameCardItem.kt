@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Gamepad
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -72,6 +73,8 @@ fun GameCardItem(
     onLongClick: () -> Unit = {},
     onDownloadClick: () -> Unit,
     onFavoriteClick: () -> Unit,
+    isPlayInRetroArchEnabled: Boolean = false,
+    onPlayClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val isDownloading = downloadProgress != null
@@ -294,20 +297,28 @@ fun GameCardItem(
 
                     Spacer(modifier = Modifier.width(6.dp))
 
-                    // Compact Download button (32x32dp)
+                    // Compact Download / Play button (32x32dp)
+                    val showPlayButton = isPlayInRetroArchEnabled && game.isDownloaded
                     Box(
                         modifier = Modifier
-                            .testTag("download_btn_${game.id}")
+                            .testTag(if (showPlayButton) "play_btn_${game.id}" else "download_btn_${game.id}")
                             .size(32.dp)
                             .clip(RoundedCornerShape(8.dp))
                             .background(
                                 when {
+                                    showPlayButton -> EmeraldGreen
                                     game.isDownloaded -> EmeraldGreen.copy(alpha = 0.2f)
                                     isDownloading -> NeonCyan.copy(alpha = 0.2f)
                                     else -> NeonCyan
                                 }
                             )
-                            .clickable(enabled = !isDownloading) { onDownloadClick() },
+                            .clickable(enabled = !isDownloading) {
+                                if (showPlayButton) {
+                                    onPlayClick()
+                                } else {
+                                    onDownloadClick()
+                                }
+                            },
                         contentAlignment = Alignment.Center
                     ) {
                         when {
@@ -317,6 +328,14 @@ fun GameCardItem(
                                     modifier = Modifier.size(16.dp),
                                     color = NeonCyan,
                                     strokeWidth = 2.dp
+                                )
+                            }
+                            showPlayButton -> {
+                                Icon(
+                                    imageVector = Icons.Default.PlayArrow,
+                                    contentDescription = "Играть в RetroArch",
+                                    tint = OnPrimary,
+                                    modifier = Modifier.size(20.dp)
                                 )
                             }
                             game.isDownloaded -> {

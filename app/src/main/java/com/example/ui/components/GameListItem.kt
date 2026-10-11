@@ -25,6 +25,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -57,6 +58,7 @@ import com.example.ui.theme.ArcadeSurfaceVariant
 import com.example.ui.theme.EmeraldGreen
 import com.example.ui.theme.NeonCyan
 import com.example.ui.theme.NintendoRed
+import com.example.ui.theme.OnPrimary
 import com.example.ui.theme.RetroMagenta
 import com.example.ui.theme.SegaBlue
 import com.example.ui.theme.SonyTeal
@@ -81,6 +83,8 @@ fun GameListItem(
     onCoverLongClick: () -> Unit = onLongClick,
     onDownloadClick: () -> Unit,
     onFavoriteClick: () -> Unit,
+    isPlayInRetroArchEnabled: Boolean = false,
+    onPlayClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val isDownloading = downloadProgress != null
@@ -285,32 +289,52 @@ fun GameListItem(
                     )
                 }
 
-                IconButton(
-                    onClick = onDownloadClick,
-                    enabled = !isDownloading,
-                    modifier = Modifier.size(30.dp)
-                ) {
-                    if (isDownloading) {
-                        CircularProgressIndicator(
-                            progress = { (downloadProgress?.percent ?: 0) / 100f },
-                            modifier = Modifier.size(14.dp),
-                            color = NeonCyan,
-                            strokeWidth = 2.dp
-                        )
-                    } else if (game.isDownloaded) {
+                val showPlayButton = isPlayInRetroArchEnabled && game.isDownloaded
+                if (showPlayButton) {
+                    Box(
+                        modifier = Modifier
+                            .testTag("play_btn_${game.id}")
+                            .size(28.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(EmeraldGreen)
+                            .clickable { onPlayClick() },
+                        contentAlignment = Alignment.Center
+                    ) {
                         Icon(
-                            imageVector = Icons.Default.CheckCircle,
-                            contentDescription = "Скачано",
-                            tint = EmeraldGreen,
-                            modifier = Modifier.size(16.dp)
+                            imageVector = Icons.Default.PlayArrow,
+                            contentDescription = "Играть в RetroArch",
+                            tint = OnPrimary,
+                            modifier = Modifier.size(18.dp)
                         )
-                    } else {
-                        Icon(
-                            imageVector = Icons.Default.Download,
-                            contentDescription = "Скачать",
-                            tint = NeonCyan,
-                            modifier = Modifier.size(16.dp)
-                        )
+                    }
+                } else {
+                    IconButton(
+                        onClick = onDownloadClick,
+                        enabled = !isDownloading,
+                        modifier = Modifier.size(30.dp)
+                    ) {
+                        if (isDownloading) {
+                            CircularProgressIndicator(
+                                progress = { (downloadProgress?.percent ?: 0) / 100f },
+                                modifier = Modifier.size(14.dp),
+                                color = NeonCyan,
+                                strokeWidth = 2.dp
+                            )
+                        } else if (game.isDownloaded) {
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = "Скачано",
+                                tint = EmeraldGreen,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Download,
+                                contentDescription = "Скачать",
+                                tint = NeonCyan,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
                     }
                 }
             }

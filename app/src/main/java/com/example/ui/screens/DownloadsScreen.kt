@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
@@ -28,6 +29,7 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Gamepad
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -78,6 +80,8 @@ fun DownloadsScreen(
     onToggleAutoUnpack: (Boolean) -> Unit = {},
     isDeleteZipAfterUnpack: Boolean = true,
     onToggleDeleteZip: (Boolean) -> Unit = {},
+    isPlayInRetroArchEnabled: Boolean = false,
+    onPlayDownload: ((DownloadRecord) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -460,6 +464,26 @@ fun DownloadsScreen(
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
+                            }
+
+                            if (item.status == DownloadStatus.COMPLETED && isPlayInRetroArchEnabled && onPlayDownload != null) {
+                                Box(
+                                    modifier = Modifier
+                                        .testTag("play_download_${item.id}")
+                                        .size(32.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(EmeraldGreen)
+                                        .clickable { onPlayDownload(item) },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.PlayArrow,
+                                        contentDescription = "Играть в RetroArch",
+                                        tint = OnPrimary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(6.dp))
                             }
 
                             IconButton(

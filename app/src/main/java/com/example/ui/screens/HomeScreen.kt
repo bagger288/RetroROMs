@@ -134,6 +134,8 @@ fun HomeScreen(
     onCardClick: (GameCard) -> Unit,
     onDownloadClick: (GameCard) -> Unit,
     onFavoriteClick: (GameCard) -> Unit,
+    isPlayInRetroArchEnabled: Boolean = false,
+    onPlayClick: (GameCard) -> Unit = {},
     onOpenManageConsoles: () -> Unit,
     onRefresh: () -> Unit,
     catalogViewMode: CatalogViewMode = CatalogViewMode.GRID,
@@ -779,7 +781,9 @@ fun HomeScreen(
                             onCardClick = { onCardClick(game) },
                             onLongClick = { previewGame = game },
                             onDownloadClick = { onDownloadClick(game) },
-                            onFavoriteClick = { onFavoriteClick(game) }
+                            onFavoriteClick = { onFavoriteClick(game) },
+                            isPlayInRetroArchEnabled = isPlayInRetroArchEnabled,
+                            onPlayClick = { onPlayClick(game) }
                         )
                     } else {
                         GameListItem(
@@ -788,7 +792,9 @@ fun HomeScreen(
                             onCardClick = { onCardClick(game) },
                             onLongClick = { previewGame = game },
                             onDownloadClick = { onDownloadClick(game) },
-                            onFavoriteClick = { onFavoriteClick(game) }
+                            onFavoriteClick = { onFavoriteClick(game) },
+                            isPlayInRetroArchEnabled = isPlayInRetroArchEnabled,
+                            onPlayClick = { onPlayClick(game) }
                         )
                     }
                 }

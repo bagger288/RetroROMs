@@ -7,6 +7,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBars
@@ -23,6 +24,9 @@ import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Gamepad
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -32,6 +36,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -39,8 +44,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -56,10 +63,12 @@ import com.example.ui.theme.ArcadeCardBorder
 import com.example.ui.theme.ArcadeDarkBg
 import com.example.ui.theme.ArcadeSurface
 import com.example.ui.theme.ArcadeSurfaceVariant
+import com.example.ui.theme.EmeraldGreen
 import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.theme.NeonCyan
 import com.example.ui.theme.OnPrimary
 import com.example.ui.theme.TextMuted
+import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
 import com.example.ui.viewmodel.EmuLandViewModel
 import kotlinx.coroutines.flow.collectLatest
@@ -122,7 +131,10 @@ fun RetroROMsApp(viewModel: EmuLandViewModel = viewModel()) {
     val customSurface by viewModel.customSurface.collectAsStateWithLifecycle()
     val customSecondary by viewModel.customSecondary.collectAsStateWithLifecycle()
     val catalogViewMode by viewModel.catalogViewMode.collectAsStateWithLifecycle()
+    val isPlayInRetroArchEnabled by viewModel.isPlayInRetroArchEnabled.collectAsStateWithLifecycle()
+    val installRetroArchPromptGame by viewModel.installRetroArchPromptGame.collectAsStateWithLifecycle()
 
+    val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val versionsSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -304,6 +316,8 @@ fun RetroROMsApp(viewModel: EmuLandViewModel = viewModel()) {
                         onCardClick = { viewModel.openGameDetail(it) },
                         onDownloadClick = { viewModel.downloadGame(it) },
                         onFavoriteClick = { viewModel.toggleFavorite(it) },
+                        isPlayInRetroArchEnabled = isPlayInRetroArchEnabled,
+                        onPlayClick = { viewModel.launchGameInRetroArch(context, it) },
                         onOpenManageConsoles = { viewModel.setShowManageConsoles(true) },
                         onRefresh = { viewModel.refreshFromWeb() },
                         catalogViewMode = catalogViewMode,
@@ -321,7 +335,9 @@ fun RetroROMsApp(viewModel: EmuLandViewModel = viewModel()) {
                         isAutoUnpackEnabled = isAutoUnpackEnabled,
                         onToggleAutoUnpack = { viewModel.setAutoUnpackEnabled(it) },
                         isDeleteZipAfterUnpack = isDeleteZipAfterUnpack,
-                        onToggleDeleteZip = { viewModel.setDeleteZipAfterUnpack(it) }
+                        onToggleDeleteZip = { viewModel.setDeleteZipAfterUnpack(it) },
+                        isPlayInRetroArchEnabled = isPlayInRetroArchEnabled,
+                        onPlayDownload = { viewModel.launchDownloadInRetroArch(context, it) }
                     )
                 }
 
@@ -331,7 +347,9 @@ fun RetroROMsApp(viewModel: EmuLandViewModel = viewModel()) {
                         activeDownloads = activeDownloads,
                         onCardClick = { viewModel.openGameDetail(it) },
                         onDownloadClick = { viewModel.downloadGame(it) },
-                        onFavoriteClick = { viewModel.toggleFavorite(it) }
+                        onFavoriteClick = { viewModel.toggleFavorite(it) },
+                        isPlayInRetroArchEnabled = isPlayInRetroArchEnabled,
+                        onPlayClick = { viewModel.launchGameInRetroArch(context, it) }
                     )
                 }
             }
@@ -350,7 +368,9 @@ fun RetroROMsApp(viewModel: EmuLandViewModel = viewModel()) {
             isLoadingDetail = isLoadingDetail,
             sheetState = sheetState,
             onDismiss = { viewModel.closeGameDetail() },
-            onDownloadClick = { viewModel.downloadGame(game) }
+            onDownloadClick = { viewModel.downloadGame(game) },
+            isPlayInRetroArchEnabled = isPlayInRetroArchEnabled,
+            onPlayClick = { viewModel.launchGameInRetroArch(context, game) }
         )
     }
 
@@ -394,6 +414,8 @@ fun RetroROMsApp(viewModel: EmuLandViewModel = viewModel()) {
             onApplyPreset = { viewModel.applyPreset(it) },
             onUpdateColor = { target, color -> viewModel.updateCustomColor(target, color) },
             onResetColors = { viewModel.resetColorsToDefault() },
+            isPlayInRetroArchEnabled = isPlayInRetroArchEnabled,
+            onTogglePlayInRetroArch = { viewModel.setPlayInRetroArchEnabled(it) },
             onDismiss = { viewModel.setShowManageConsoles(false) }
         )
     }
@@ -412,6 +434,48 @@ fun RetroROMsApp(viewModel: EmuLandViewModel = viewModel()) {
             onDismiss = {
                 viewModel.dismissZipExtraction(currentPendingZip)
             }
+        )
+    }
+
+    // RetroArch Not Installed Prompt Dialog
+    installRetroArchPromptGame?.let { game ->
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissInstallRetroArchPrompt() },
+            title = {
+                Text(
+                    text = "RetroArch не установлен",
+                    color = TextPrimary,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(
+                    text = "Для запуска игры «${game.title}» требуется эмулятор RetroArch. Открыть страницу приложения в Google Play?",
+                    color = TextSecondary
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = { viewModel.openRetroArchInGooglePlay(context) },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = EmeraldGreen,
+                        contentColor = OnPrimary
+                    )
+                ) {
+                    Text("Установить")
+                }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = { viewModel.openInOtherEmulator(context, game) }) {
+                        Text("Другой эмулятор", color = NeonCyan)
+                    }
+                    TextButton(onClick = { viewModel.dismissInstallRetroArchPrompt() }) {
+                        Text("Отмена", color = TextMuted)
+                    }
+                }
+            },
+            containerColor = ArcadeSurfaceVariant
         )
     }
 }

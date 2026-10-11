@@ -1,7 +1,11 @@
 package com.example.ui.viewmodel
 
 import android.app.Application
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.util.Log
+import androidx.core.content.FileProvider
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.downloader.RomDownloader
@@ -281,6 +285,22 @@ class EmuLandViewModel(application: Application) : AndroidViewModel(application)
 
     private val _isDeleteZipAfterUnpack = MutableStateFlow(repository.isDeleteZipAfterUnpack())
     val isDeleteZipAfterUnpack: StateFlow<Boolean> = _isDeleteZipAfterUnpack.asStateFlow()
+
+    // RetroArch Game Launch integration
+    private val _isPlayInRetroArchEnabled = MutableStateFlow(repository.isLaunchInRetroArch())
+    val isPlayInRetroArchEnabled: StateFlow<Boolean> = _isPlayInRetroArchEnabled.asStateFlow()
+
+    fun setPlayInRetroArchEnabled(enabled: Boolean) {
+        _isPlayInRetroArchEnabled.value = enabled
+        repository.setLaunchInRetroArch(enabled)
+    }
+
+    private val _installRetroArchPromptGame = MutableStateFlow<GameCard?>(null)
+    val installRetroArchPromptGame: StateFlow<GameCard?> = _installRetroArchPromptGame.asStateFlow()
+
+    fun dismissInstallRetroArchPrompt() {
+        _installRetroArchPromptGame.value = null
+    }
 
     // Snackbars / Feedback messages
     private val _userMessage = MutableSharedFlow<String>()
@@ -672,5 +692,105 @@ class EmuLandViewModel(application: Application) : AndroidViewModel(application)
         _customSurface.value = DefaultDarkTheme.surface
         _customSecondary.value = DefaultDarkTheme.secondaryAccent
         _customOnPrimary.value = DefaultDarkTheme.onPrimaryAccent
+    }
+
+    fun launchGameInRetroArch(context: Context, game: GameCard) {
+        viewModelScope.launch {
+            val file = repository.findDownloadedGameFile(game)
+            if (file == null || !file.exists()) {
+                _userMessage.emit("Файл игры не найден на диске. Возможно, он был перемещен.")
+                return@launch
+            }
+
+            val pm = context.packageManager
+            val retroArchPackages = listOf(
+                "com.retroarch",
+                "com.retroarch.aarch64",
+                "com.retroarch.ra32"
+            )
+            val installedPackage = retroArchPackages.firstOrNull { pkg ->
+                try {
+                    pm.getPackageInfo(pkg, 0)
+                    true
+                } catch (_: Exception) {
+                    false
+                }
+            }
+
+            if (installedPackage != null) {
+                try {
+                    val contentUri = FileProvider.getUriForFile(
+                        context,
+                        "${context.packageName}.fileprovider",
+                        file
+                    )
+                    val intent = Intent(Intent.ACTION_VIEW).apply {
+                        setDataAndType(contentUri, "application/octet-stream")
+                        setPackage(installedPackage)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+                        putExtra("ROM", file.absolutePath)
+                        putExtra("PATH", file.absolutePath)
+                    }
+                    context.startActivity(intent)
+                    _userMessage.emit("Запуск ${game.title} в RetroArch…")
+                } catch (e: Exception) {
+                    Log.e("RetroArch", "Failed to launch game: ${e.message}", e)
+                    openInOtherEmulator(context, game)
+                }
+            } else {
+                // RetroArch is not installed
+                _installRetroArchPromptGame.value = game
+            }
+        }
+    }
+
+    fun openRetroArchInGooglePlay(context: Context) {
+        dismissInstallRetroArchPrompt()
+        try {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=com.retroarch")).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+        } catch (_: Exception) {
+            val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=com.retroarch")).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(webIntent)
+        }
+    }
+
+    fun openInOtherEmulator(context: Context, game: GameCard) {
+        dismissInstallRetroArchPrompt()
+        viewModelScope.launch {
+            val file = repository.findDownloadedGameFile(game) ?: return@launch
+            try {
+                val contentUri = FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.fileprovider",
+                    file
+                )
+                val intent = Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(contentUri, "application/octet-stream")
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                val chooser = Intent.createChooser(intent, "Открыть игру с помощью…").apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(chooser)
+            } catch (e: Exception) {
+                _userMessage.emit("Не удалось запустить игру: ${e.message}")
+            }
+        }
+    }
+
+    fun launchDownloadInRetroArch(context: Context, download: DownloadRecord) {
+        val game = GameCard(
+            id = download.gameId,
+            title = download.gameTitle,
+            consoleSlug = download.consoleSlug,
+            consoleName = download.consoleName,
+            isDownloaded = true
+        )
+        launchGameInRetroArch(context, game)
     }
 }

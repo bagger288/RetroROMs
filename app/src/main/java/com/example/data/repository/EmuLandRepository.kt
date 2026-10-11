@@ -296,6 +296,11 @@ class EmuLandRepository(
     fun isDeleteZipAfterUnpack(): Boolean = downloader.isDeleteZipAfterUnpack()
     fun setDeleteZipAfterUnpack(enabled: Boolean) = downloader.setDeleteZipAfterUnpack(enabled)
 
+    fun isLaunchInRetroArch(): Boolean = downloader.isLaunchInRetroArch()
+    fun setLaunchInRetroArch(enabled: Boolean) = downloader.setLaunchInRetroArch(enabled)
+
+    suspend fun findDownloadedGameFile(game: GameCard): java.io.File? = downloader.findDownloadedGameFile(game)
+
     suspend fun extractSelectedZipEntries(
         request: ZipExtractionRequest,
         selectedEntryNames: List<String>

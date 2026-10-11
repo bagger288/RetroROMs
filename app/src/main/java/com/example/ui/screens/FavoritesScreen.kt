@@ -44,6 +44,8 @@ fun FavoritesScreen(
     onCardClick: (GameCard) -> Unit,
     onDownloadClick: (GameCard) -> Unit,
     onFavoriteClick: (GameCard) -> Unit,
+    isPlayInRetroArchEnabled: Boolean = false,
+    onPlayClick: (GameCard) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var previewGame by remember { mutableStateOf<GameCard?>(null) }
@@ -109,7 +111,9 @@ fun FavoritesScreen(
                         onCardClick = { onCardClick(game) },
                         onLongClick = { previewGame = game },
                         onDownloadClick = { onDownloadClick(game) },
-                        onFavoriteClick = { onFavoriteClick(game) }
+                        onFavoriteClick = { onFavoriteClick(game) },
+                        isPlayInRetroArchEnabled = isPlayInRetroArchEnabled,
+                        onPlayClick = { onPlayClick(game) }
                     )
                 }
             }
