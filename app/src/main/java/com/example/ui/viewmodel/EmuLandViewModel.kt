@@ -757,15 +757,21 @@ class EmuLandViewModel(application: Application) : AndroidViewModel(application)
                 retroArchPackages
             }
 
+            val canonicalFile = try {
+                file.canonicalFile
+            } catch (_: Exception) {
+                file
+            }
+
             val contentUri = try {
                 FileProvider.getUriForFile(
                     context,
                     "${context.packageName}.fileprovider",
-                    file
+                    canonicalFile
                 )
             } catch (e: Exception) {
                 Log.w("RetroArch", "Failed to get FileProvider URI: ${e.message}")
-                Uri.fromFile(file)
+                Uri.fromFile(canonicalFile)
             }
 
             var launched = false
@@ -784,8 +790,8 @@ class EmuLandViewModel(application: Application) : AndroidViewModel(application)
                     try {
                         val intent = Intent(Intent.ACTION_MAIN).apply {
                             component = comp
-                            putExtra("ROM", file.absolutePath)
-                            putExtra("PATH", file.absolutePath)
+                            putExtra("ROM", canonicalFile.absolutePath)
+                            putExtra("PATH", canonicalFile.absolutePath)
                             putExtra("CONFIGFILE", "/storage/emulated/0/Android/data/$pkg/files/retroarch.cfg")
                             data = contentUri
                             clipData = ClipData.newRawUri("ROM", contentUri)
@@ -808,8 +814,8 @@ class EmuLandViewModel(application: Application) : AndroidViewModel(application)
                 // Fallback: package launch intent with ROM extra
                 try {
                     val launchIntent = pm.getLaunchIntentForPackage(pkg)?.apply {
-                        putExtra("ROM", file.absolutePath)
-                        putExtra("PATH", file.absolutePath)
+                        putExtra("ROM", canonicalFile.absolutePath)
+                        putExtra("PATH", canonicalFile.absolutePath)
                         data = contentUri
                         clipData = ClipData.newRawUri("ROM", contentUri)
                         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -855,11 +861,12 @@ class EmuLandViewModel(application: Application) : AndroidViewModel(application)
         dismissInstallRetroArchPrompt()
         viewModelScope.launch {
             val file = repository.findDownloadedGameFile(game) ?: return@launch
+            val canonicalFile = try { file.canonicalFile } catch (_: Exception) { file }
             try {
                 val contentUri = FileProvider.getUriForFile(
                     context,
                     "${context.packageName}.fileprovider",
-                    file
+                    canonicalFile
                 )
                 val intent = Intent(Intent.ACTION_VIEW).apply {
                     setDataAndType(contentUri, "*/*")

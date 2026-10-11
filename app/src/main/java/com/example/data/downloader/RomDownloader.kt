@@ -539,53 +539,144 @@ class RomDownloader(
      * Resolves the downloaded ROM file on local disk for a game.
      */
     suspend fun findDownloadedGameFile(game: GameCard): File? = withContext(Dispatchers.IO) {
-        // 1. Check last download record in DB
-        val record = downloadDao.getDownloadByGameId(game.id)
-            ?: downloadDao.getDownloadByGameTitle(game.title)
-        if (record != null) {
-            val direct = File(record.targetDirectory)
-            if (direct.exists() && direct.isFile) return@withContext direct
-            val combo = File(record.targetDirectory, record.fileName)
-            if (combo.exists() && combo.isFile) return@withContext combo
+        // 1. Check all DB records matching game.id or title
+        val records = mutableListOf<DownloadEntity>()
+        downloadDao.getDownloadByGameId(game.id)?.let { records.add(it) }
+        downloadDao.getDownloadByGameTitle(game.title)?.let { records.add(it) }
 
-            // Check if targetDirectory is a directory
-            if (direct.exists() && direct.isDirectory) {
-                val candidate = direct.listFiles()?.firstOrNull { it.isFile && !it.name.endsWith(".tmp") }
-                if (candidate != null) return@withContext candidate
+        for (record in records) {
+            val fileCandidates = resolvePathCandidates(record.targetDirectory, record.fileName)
+            for (cand in fileCandidates) {
+                if (cand.exists() && cand.isFile && cand.length() > 0) {
+                    Log.d("RomDownloader", "Found game file via DB record: ${cand.absolutePath}")
+                    return@withContext cand
+                }
             }
         }
 
-        val consoleFolder = getConsoleFolderBySlug(game.consoleSlug)
-        val cleanTitle = game.title.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim()
-
-        // 2. Check public /sdcard/Download/RetroROMs/<consoleFolder>/
+        // 2. Search public /storage/emulated/0/Download/RetroROMs/ folder
         val publicDownloads = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-        val retroDir = File(publicDownloads, "RetroROMs/$consoleFolder")
-        if (retroDir.exists() && retroDir.isDirectory) {
-            val files = retroDir.listFiles()?.filter { it.isFile && !it.name.endsWith(".tmp") } ?: emptyList()
-            val match = files.firstOrNull { f ->
-                val base = f.nameWithoutExtension
-                base.equals(cleanTitle, ignoreCase = true) ||
-                base.startsWith(cleanTitle, ignoreCase = true) ||
-                cleanTitle.startsWith(base, ignoreCase = true)
-            } ?: files.firstOrNull { it.name.contains(cleanTitle, ignoreCase = true) }
-            if (match != null) return@withContext match
+        val retroRoot = File(publicDownloads, "RetroROMs")
+        val foundInPublic = searchInRetroRomDirectory(retroRoot, game)
+        if (foundInPublic != null) {
+            Log.d("RomDownloader", "Found game file in public RetroROMs: ${foundInPublic.absolutePath}")
+            return@withContext foundInPublic
         }
 
-        // 3. Check fallback app-specific external files dir
-        val fallbackDir = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "RetroROMs/$consoleFolder")
-        if (fallbackDir.exists() && fallbackDir.isDirectory) {
-            val files = fallbackDir.listFiles()?.filter { it.isFile && !it.name.endsWith(".tmp") } ?: emptyList()
-            val match = files.firstOrNull { f ->
-                val base = f.nameWithoutExtension
-                base.equals(cleanTitle, ignoreCase = true) ||
-                base.startsWith(cleanTitle, ignoreCase = true) ||
-                cleanTitle.startsWith(base, ignoreCase = true)
-            } ?: files.firstOrNull { it.name.contains(cleanTitle, ignoreCase = true) }
-            if (match != null) return@withContext match
+        // 3. Search fallback app-specific external files dir
+        val fallbackRoot = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "RetroROMs")
+        val foundInFallback = searchInRetroRomDirectory(fallbackRoot, game)
+        if (foundInFallback != null) {
+            Log.d("RomDownloader", "Found game file in fallback RetroROMs: ${foundInFallback.absolutePath}")
+            return@withContext foundInFallback
         }
 
+        // 4. Also check directly inside Download root in case ROM was placed there
+        if (publicDownloads.exists() && publicDownloads.isDirectory) {
+            val matched = findMatchingRomInFiles(publicDownloads.listFiles()?.filter { it.isFile } ?: emptyList(), game)
+            if (matched != null) {
+                Log.d("RomDownloader", "Found game file in Download root: ${matched.absolutePath}")
+                return@withContext matched
+            }
+        }
+
+        Log.w("RomDownloader", "Game file not found on disk for '${game.title}' (id=${game.id}, slug=${game.consoleSlug})")
         null
+    }
+
+    private fun resolvePathCandidates(targetDirectory: String, fileName: String?): List<File> {
+        val result = mutableListOf<File>()
+        val publicDownloads = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+
+        val rawTarget = File(targetDirectory)
+        result.add(rawTarget)
+
+        if (targetDirectory.startsWith("/sdcard/")) {
+            val canonical = targetDirectory.replaceFirst("/sdcard/", "/storage/emulated/0/")
+            result.add(File(canonical))
+        } else if (targetDirectory.startsWith("/storage/emulated/0/")) {
+            val sdcard = targetDirectory.replaceFirst("/storage/emulated/0/", "/sdcard/")
+            result.add(File(sdcard))
+        }
+
+        if (targetDirectory.contains("Download/")) {
+            val rel = targetDirectory.substringAfter("Download/").trimStart('/')
+            result.add(File(publicDownloads, rel))
+        }
+
+        if (!fileName.isNullOrBlank()) {
+            val candidateDirs = result.toList()
+            for (dir in candidateDirs) {
+                result.add(File(dir, fileName))
+                if (dir.exists() && dir.isDirectory) {
+                    val subFile = File(dir, fileName)
+                    if (subFile.exists() && subFile.isFile) result.add(subFile)
+                }
+            }
+        }
+
+        return result
+    }
+
+    private fun searchInRetroRomDirectory(rootDir: File, game: GameCard): File? {
+        if (!rootDir.exists() || !rootDir.isDirectory) return null
+
+        val subDirs = rootDir.listFiles()?.filter { it.isDirectory } ?: emptyList()
+        val allFoldersToSearch = mutableListOf<File>()
+
+        val slugFolder = getConsoleFolderBySlug(game.consoleSlug)
+        subDirs.firstOrNull { it.name.equals(slugFolder, ignoreCase = true) }?.let { allFoldersToSearch.add(it) }
+
+        subDirs.filter {
+            it.name.contains(game.consoleSlug, ignoreCase = true) ||
+            it.name.contains(slugFolder, ignoreCase = true) ||
+            game.consoleName.contains(it.name, ignoreCase = true)
+        }.forEach { if (it !in allFoldersToSearch) allFoldersToSearch.add(it) }
+
+        subDirs.forEach { if (it !in allFoldersToSearch) allFoldersToSearch.add(it) }
+
+        for (dir in allFoldersToSearch) {
+            val files = dir.listFiles()?.filter { it.isFile && !it.name.endsWith(".tmp") } ?: emptyList()
+            val matched = findMatchingRomInFiles(files, game)
+            if (matched != null) return matched
+        }
+
+        val rootFiles = rootDir.listFiles()?.filter { it.isFile && !it.name.endsWith(".tmp") } ?: emptyList()
+        return findMatchingRomInFiles(rootFiles, game)
+    }
+
+    private fun findMatchingRomInFiles(files: List<File>, game: GameCard): File? {
+        if (files.isEmpty()) return null
+
+        val cleanTitle = game.title.replace(Regex("[\\[\\]()\\\\/:*?\"<>|]"), " ").trim()
+        val words = cleanTitle.split(Regex("\\s+")).filter { it.length > 2 }
+
+        // 1. Exact match by nameWithoutExtension
+        files.firstOrNull { it.nameWithoutExtension.equals(cleanTitle, ignoreCase = true) }?.let { return it }
+
+        // 2. Starts with clean title
+        files.firstOrNull { it.nameWithoutExtension.startsWith(cleanTitle, ignoreCase = true) }?.let { return it }
+
+        // 3. Clean title starts with file name without extension
+        files.firstOrNull { cleanTitle.startsWith(it.nameWithoutExtension, ignoreCase = true) }?.let { return it }
+
+        // 4. File name contains clean title
+        files.firstOrNull { it.name.contains(cleanTitle, ignoreCase = true) }?.let { return it }
+
+        // 5. If title has multiple significant words, check if all or most words are in file name
+        if (words.isNotEmpty()) {
+            files.firstOrNull { f ->
+                val lower = f.name.lowercase()
+                words.all { w -> lower.contains(w.lowercase()) }
+            }?.let { return it }
+
+            if (words.size >= 2) {
+                val prefix = "${words[0]} ${words[1]}".lowercase()
+                files.firstOrNull { it.name.lowercase().contains(prefix) }?.let { return it }
+            }
+        }
+
+        return null
     }
 
     fun getConsoleFolderBySlug(slug: String): String {
@@ -671,7 +762,9 @@ class RomDownloader(
                 if (uri != null) {
                     val stream = context.contentResolver.openOutputStream(uri)
                     if (stream != null) {
-                        return stream to "/sdcard/Download/RetroROMs/$consoleFolderName/$fileName"
+                        val publicDownloads = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                        val canonicalPath = File(publicDownloads, "RetroROMs/$consoleFolderName/$fileName").absolutePath
+                        return stream to canonicalPath
                     }
                 }
             } catch (e: Exception) {
