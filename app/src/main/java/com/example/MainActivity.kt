@@ -56,6 +56,7 @@ import com.example.ui.screens.DownloadsScreen
 import com.example.ui.screens.FavoritesScreen
 import com.example.ui.screens.GameDetailSheet
 import com.example.ui.screens.HomeScreen
+import com.example.ui.screens.RetroArchLaunchDialog
 import com.example.ui.screens.RomVersionsSheet
 import com.example.ui.screens.SettingsDialog
 import com.example.ui.screens.ZipExtractionDialog
@@ -133,6 +134,7 @@ fun RetroROMsApp(viewModel: EmuLandViewModel = viewModel()) {
     val catalogViewMode by viewModel.catalogViewMode.collectAsStateWithLifecycle()
     val isPlayInRetroArchEnabled by viewModel.isPlayInRetroArchEnabled.collectAsStateWithLifecycle()
     val installRetroArchPromptGame by viewModel.installRetroArchPromptGame.collectAsStateWithLifecycle()
+    val retroArchLaunchTip by viewModel.retroArchLaunchTip.collectAsStateWithLifecycle()
 
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
@@ -154,8 +156,12 @@ fun RetroROMsApp(viewModel: EmuLandViewModel = viewModel()) {
     }
 
     // Back handling
-    BackHandler(enabled = currentTab != 0 || selectedGameForDetail != null || selectedGameForVersions != null || showManageConsoles || pendingZipExtraction != null) {
-        if (pendingZipExtraction != null) {
+    BackHandler(enabled = currentTab != 0 || selectedGameForDetail != null || selectedGameForVersions != null || showManageConsoles || pendingZipExtraction != null || retroArchLaunchTip != null || installRetroArchPromptGame != null) {
+        if (retroArchLaunchTip != null) {
+            viewModel.dismissRetroArchLaunchTip()
+        } else if (installRetroArchPromptGame != null) {
+            viewModel.dismissInstallRetroArchPrompt()
+        } else if (pendingZipExtraction != null) {
             viewModel.dismissZipExtraction(pendingZipExtraction!!)
         } else if (selectedGameForVersions != null) {
             viewModel.closeVersionsSheet()
@@ -480,6 +486,30 @@ fun RetroROMsApp(viewModel: EmuLandViewModel = viewModel()) {
                 }
             },
             containerColor = ArcadeSurfaceVariant
+        )
+    }
+
+    // RetroArch Launch Tip & Core Guide Dialog
+    retroArchLaunchTip?.let { tip ->
+        RetroArchLaunchDialog(
+            tip = tip,
+            onLaunchNow = {
+                viewModel.executeDirectRetroArchLaunch(context, tip.game)
+            },
+            onOpenRetroArchMenu = {
+                viewModel.openRetroArchMainMenu(context)
+            },
+            onOpenOtherEmulator = {
+                viewModel.openInOtherEmulator(context, tip.game)
+            },
+            onDismiss = {
+                viewModel.dismissRetroArchLaunchTip()
+            },
+            onNeverShowAgain = { neverShow ->
+                if (neverShow) {
+                    viewModel.neverShowRetroArchLaunchTip(context)
+                }
+            }
         )
     }
 }

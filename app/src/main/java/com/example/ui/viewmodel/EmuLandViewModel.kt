@@ -12,6 +12,8 @@ import androidx.core.content.FileProvider
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.downloader.RomDownloader
+import com.example.data.emulator.CoreOption
+import com.example.data.emulator.RetroArchManager
 import com.example.data.local.AppDatabase
 import com.example.data.remote.EmuLandScraper
 import com.example.data.repository.EmuLandRepository
@@ -324,6 +326,18 @@ class EmuLandViewModel(application: Application) : AndroidViewModel(application)
 
     fun dismissInstallRetroArchPrompt() {
         _installRetroArchPromptGame.value = null
+    }
+
+    private val _retroArchLaunchTip = MutableStateFlow<RetroArchTipData?>(null)
+    val retroArchLaunchTip: StateFlow<RetroArchTipData?> = _retroArchLaunchTip.asStateFlow()
+
+    fun dismissRetroArchLaunchTip() {
+        _retroArchLaunchTip.value = null
+    }
+
+    fun neverShowRetroArchLaunchTip(context: Context) {
+        RetroArchManager.setShowLaunchTipEnabled(context, false)
+        _retroArchLaunchTip.value = null
     }
 
     // Snackbars / Feedback messages
@@ -718,7 +732,46 @@ class EmuLandViewModel(application: Application) : AndroidViewModel(application)
         _customOnPrimary.value = DefaultDarkTheme.onPrimaryAccent
     }
 
-    fun launchGameInRetroArch(context: Context, game: GameCard) {
+    fun launchGameInRetroArch(context: Context, game: GameCard, forceTip: Boolean = false) {
+        viewModelScope.launch {
+            if (!_isPlayInRetroArchEnabled.value) {
+                openInOtherEmulator(context, game)
+                return@launch
+            }
+
+            val file = repository.findDownloadedGameFile(game)
+            if (file == null || !file.exists()) {
+                _userMessage.emit("Файл игры не найден на диске. Возможно, он был перемещен.")
+                return@launch
+            }
+
+            val detectedPackage = RetroArchManager.detectInstalledPackage(context)
+            if (detectedPackage == null) {
+                _installRetroArchPromptGame.value = game
+                return@launch
+            }
+
+            val canonicalFile = try { file.canonicalFile } catch (_: Exception) { file }
+            val core = RetroArchManager.getPreferredCore(context, game.consoleSlug, canonicalFile)
+
+            // If launch tip is enabled (or forced), show tip dialog first so user knows which core is needed!
+            if (forceTip || RetroArchManager.isShowLaunchTipEnabled(context)) {
+                _retroArchLaunchTip.value = RetroArchTipData(
+                    game = game,
+                    coreDisplayName = core.displayName,
+                    coreFileName = core.fileName,
+                    isInstalled = true
+                )
+                return@launch
+            }
+
+            // Otherwise, launch directly
+            executeDirectRetroArchLaunch(context, game)
+        }
+    }
+
+    fun executeDirectRetroArchLaunch(context: Context, game: GameCard) {
+        dismissRetroArchLaunchTip()
         viewModelScope.launch {
             val file = repository.findDownloadedGameFile(game)
             if (file == null || !file.exists()) {
@@ -726,42 +779,14 @@ class EmuLandViewModel(application: Application) : AndroidViewModel(application)
                 return@launch
             }
 
-            val pm = context.packageManager
-            val retroArchPackages = listOf(
-                "com.retroarch.aarch64",
-                "com.retroarch",
-                "com.retroarch.ra32"
-            )
-
-            // Detect installed package via getPackageInfo or getLaunchIntentForPackage
-            val detectedPackage = retroArchPackages.firstOrNull { pkg ->
-                try {
-                    pm.getPackageInfo(pkg, 0)
-                    true
-                } catch (_: Exception) {
-                    try {
-                        pm.getLaunchIntentForPackage(pkg) != null
-                    } catch (_: Exception) {
-                        false
-                    }
-                }
-            } ?: try {
-                pm.getInstalledApplications(0)
-                    .firstOrNull { it.packageName.contains("retroarch", ignoreCase = true) }
-                    ?.packageName
-            } catch (_: Exception) { null }
-
-            val packagesToTry = if (detectedPackage != null) {
-                listOf(detectedPackage) + (retroArchPackages - detectedPackage)
-            } else {
-                retroArchPackages
+            val detectedPackage = RetroArchManager.detectInstalledPackage(context)
+            if (detectedPackage == null) {
+                _installRetroArchPromptGame.value = game
+                return@launch
             }
 
-            val canonicalFile = try {
-                file.canonicalFile
-            } catch (_: Exception) {
-                file
-            }
+            val canonicalFile = try { file.canonicalFile } catch (_: Exception) { file }
+            val core = RetroArchManager.getPreferredCore(context, game.consoleSlug, canonicalFile)
 
             val contentUri = try {
                 FileProvider.getUriForFile(
@@ -776,68 +801,61 @@ class EmuLandViewModel(application: Application) : AndroidViewModel(application)
 
             var launched = false
 
-            for (pkg in packagesToTry) {
-                // RetroArch entry point activities used by launchers and frontends
-                val candidateComponents = listOf(
-                    ComponentName(pkg, "com.retroarch.browser.retroactivity.RetroActivityFuture"),
-                    ComponentName(pkg, "$pkg.browser.retroactivity.RetroActivityFuture"),
-                    ComponentName(pkg, "com.retroarch.browser.retroactivity.RetroActivity"),
-                    ComponentName(pkg, "$pkg.browser.retroactivity.RetroActivity"),
-                    ComponentName(pkg, "com.retroarch.browser.mainmenu.MainMenuActivity")
+            // 1. Primary: Launch via RetroActivityFuture with exact LIBRETRO core extra
+            try {
+                val intent = RetroArchManager.createLaunchIntent(
+                    context = context,
+                    targetPackage = detectedPackage,
+                    romFile = canonicalFile,
+                    core = core,
+                    contentUri = contentUri
                 )
+                context.startActivity(intent)
+                launched = true
+            } catch (e: Exception) {
+                Log.w("RetroArch", "Failed launch via RetroActivityFuture: ${e.message}")
+            }
 
-                for (comp in candidateComponents) {
-                    try {
-                        val intent = Intent(Intent.ACTION_MAIN).apply {
-                            component = comp
-                            putExtra("ROM", canonicalFile.absolutePath)
-                            putExtra("PATH", canonicalFile.absolutePath)
-                            putExtra("CONFIGFILE", "/storage/emulated/0/Android/data/$pkg/files/retroarch.cfg")
-                            data = contentUri
-                            clipData = ClipData.newRawUri("ROM", contentUri)
-                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
-                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
-                        }
-                        context.startActivity(intent)
-                        launched = true
-                        _userMessage.emit("Запуск ${game.title} в RetroArch…")
-                        break
-                    } catch (_: ActivityNotFoundException) {
-                        // Component not found in this package, continue
-                    } catch (e: Exception) {
-                        Log.w("RetroArch", "Failed launch component $comp: ${e.message}")
-                    }
-                }
-
-                if (launched) break
-
-                // Fallback: package launch intent with ROM extra
+            // 2. Fallback: package launch intent with LIBRETRO and ROM extras
+            if (!launched) {
                 try {
-                    val launchIntent = pm.getLaunchIntentForPackage(pkg)?.apply {
-                        putExtra("ROM", canonicalFile.absolutePath)
-                        putExtra("PATH", canonicalFile.absolutePath)
-                        data = contentUri
-                        clipData = ClipData.newRawUri("ROM", contentUri)
-                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    }
-                    if (launchIntent != null) {
-                        context.startActivity(launchIntent)
+                    val fallbackIntent = RetroArchManager.createFallbackLaunchIntent(
+                        context = context,
+                        targetPackage = detectedPackage,
+                        romFile = canonicalFile,
+                        core = core,
+                        contentUri = contentUri
+                    )
+                    if (fallbackIntent != null) {
+                        context.startActivity(fallbackIntent)
                         launched = true
-                        _userMessage.emit("Запуск ${game.title} в RetroArch…")
-                        break
                     }
                 } catch (e: Exception) {
-                    Log.w("RetroArch", "Failed launch intent for $pkg: ${e.message}")
+                    Log.w("RetroArch", "Fallback launch failed: ${e.message}")
                 }
             }
 
-            if (!launched) {
-                if (detectedPackage == null) {
-                    _installRetroArchPromptGame.value = game
-                } else {
-                    openInOtherEmulator(context, game)
-                }
+            if (launched) {
+                _userMessage.emit("Запуск ${game.title} (Ядро: ${core.displayName})")
+            } else {
+                openInOtherEmulator(context, game)
+            }
+        }
+    }
+
+    fun isShowLaunchTipEnabled(context: Context): Boolean {
+        return RetroArchManager.isShowLaunchTipEnabled(context)
+    }
+
+    fun setShowLaunchTipEnabled(context: Context, enabled: Boolean) {
+        RetroArchManager.setShowLaunchTipEnabled(context, enabled)
+    }
+
+    fun openRetroArchMainMenu(context: Context) {
+        val success = RetroArchManager.openRetroArchMainMenu(context)
+        if (!success) {
+            viewModelScope.launch {
+                _userMessage.emit("Не удалось открыть меню RetroArch. Проверьте, установлен ли эмулятор.")
             }
         }
     }
@@ -859,6 +877,7 @@ class EmuLandViewModel(application: Application) : AndroidViewModel(application)
 
     fun openInOtherEmulator(context: Context, game: GameCard) {
         dismissInstallRetroArchPrompt()
+        dismissRetroArchLaunchTip()
         viewModelScope.launch {
             val file = repository.findDownloadedGameFile(game) ?: return@launch
             val canonicalFile = try { file.canonicalFile } catch (_: Exception) { file }
@@ -868,15 +887,7 @@ class EmuLandViewModel(application: Application) : AndroidViewModel(application)
                     "${context.packageName}.fileprovider",
                     canonicalFile
                 )
-                val intent = Intent(Intent.ACTION_VIEW).apply {
-                    setDataAndType(contentUri, "*/*")
-                    clipData = ClipData.newRawUri("ROM", contentUri)
-                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-                val chooser = Intent.createChooser(intent, "Открыть игру с помощью…").apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
+                val chooser = RetroArchManager.createChooserIntent(context, canonicalFile, contentUri)
                 context.startActivity(chooser)
             } catch (e: Exception) {
                 _userMessage.emit("Не удалось запустить игру: ${e.message}")
@@ -894,4 +905,23 @@ class EmuLandViewModel(application: Application) : AndroidViewModel(application)
         )
         launchGameInRetroArch(context, game)
     }
+
+    fun getPreferredCoreForConsole(context: Context, slug: String): CoreOption {
+        return RetroArchManager.getPreferredCore(context, slug)
+    }
+
+    fun setPreferredCoreForConsole(context: Context, slug: String, coreId: String) {
+        RetroArchManager.setPreferredCore(context, slug, coreId)
+    }
+
+    fun getAvailableCoresForConsole(slug: String): List<CoreOption> {
+        return RetroArchManager.getAvailableCores(slug)
+    }
 }
+
+data class RetroArchTipData(
+    val game: GameCard,
+    val coreDisplayName: String,
+    val coreFileName: String,
+    val isInstalled: Boolean
+)

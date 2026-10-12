@@ -27,6 +27,7 @@ import android.net.Uri
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import com.example.data.emulator.RetroArchManager
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
@@ -840,16 +841,10 @@ fun SettingsDialog(
                 } else {
                     // TAB 2: RETROARCH & EMULATION SETTINGS
                     val context = LocalContext.current
-                    val pm = context.packageManager
-                    val isRetroArchInstalled = remember {
-                        listOf("com.retroarch", "com.retroarch.aarch64", "com.retroarch.ra32").any { pkg ->
-                            try {
-                                pm.getPackageInfo(pkg, 0)
-                                true
-                            } catch (_: Exception) {
-                                false
-                            }
-                        }
+                    val detectedPkg = remember { RetroArchManager.detectInstalledPackage(context) }
+                    val isRetroArchInstalled = detectedPkg != null
+                    var showLaunchTipEnabled by remember {
+                        mutableStateOf(RetroArchManager.isShowLaunchTipEnabled(context))
                     }
 
                     Column(
@@ -860,14 +855,14 @@ fun SettingsDialog(
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
                         Text(
-                            text = "ИНТЕГРАЦИЯ С ЭМУЛЯТОРАМИ",
+                            text = "ИНТЕГРАЦИЯ С RETROARCH",
                             color = GoldenAmber,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             letterSpacing = 0.5.sp
                         )
 
-                        // Main Switch Card
+                        // Main Switch Card: Play in RetroArch
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -910,7 +905,7 @@ fun SettingsDialog(
                                     )
                                     Spacer(modifier = Modifier.height(2.dp))
                                     Text(
-                                        text = "При включении кнопка скачивания на карточках игр меняется на зеленую кнопку «Play» для мгновенного запуска РОМа в эмуляторе.",
+                                        text = "На карточках скачанных игр кнопка меняется на зеленую кнопку «Play» для мгновенного старта.",
                                         color = TextSecondary,
                                         fontSize = 11.5.sp,
                                         lineHeight = 15.sp
@@ -932,7 +927,7 @@ fun SettingsDialog(
                             }
                         }
 
-                        // RetroArch Status Card
+                        // RetroArch Status & Open Menu Card
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -955,12 +950,21 @@ fun SettingsDialog(
                                             modifier = Modifier.size(20.dp)
                                         )
                                         Spacer(modifier = Modifier.width(8.dp))
-                                        Text(
-                                            text = if (isRetroArchInstalled) "RetroArch установлен" else "RetroArch не найден",
-                                            color = TextPrimary,
-                                            fontSize = 13.5.sp,
-                                            fontWeight = FontWeight.Bold
-                                        )
+                                        Column {
+                                            Text(
+                                                text = if (isRetroArchInstalled) "RetroArch обнаружен" else "RetroArch не найден",
+                                                color = TextPrimary,
+                                                fontSize = 13.5.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            if (detectedPkg != null) {
+                                                Text(
+                                                    text = detectedPkg,
+                                                    color = TextMuted,
+                                                    fontSize = 11.sp
+                                                )
+                                            }
+                                        }
                                     }
 
                                     if (!isRetroArchInstalled) {
@@ -990,21 +994,71 @@ fun SettingsDialog(
                                     }
                                 }
 
-                                Spacer(modifier = Modifier.height(6.dp))
-                                Text(
-                                    text = if (isRetroArchInstalled) {
-                                        "Приложение автоматически передаст РОМ-файл через защищенный FileProvider с передачей прав на чтение."
-                                    } else {
-                                        "Для запуска игр рекомендуется установить официальный RetroArch или RetroArch Plus из Google Play."
+                                if (isRetroArchInstalled) {
+                                    Spacer(modifier = Modifier.height(10.dp))
+                                    Button(
+                                        onClick = { RetroArchManager.openRetroArchMainMenu(context) },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = NeonCyan.copy(alpha = 0.15f),
+                                            contentColor = NeonCyan
+                                        ),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Text("Открыть главное меню RetroArch", fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                        }
+
+                        // Switch: Show launch tip / core info before launching
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(ArcadeSurfaceVariant)
+                                .border(1.dp, ArcadeCardBorder, RoundedCornerShape(14.dp))
+                                .padding(14.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Подсказка по ядру перед запуском",
+                                        color = TextPrimary,
+                                        fontSize = 13.5.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = "Показывает окно с названием необходимого ядра Libretro и инструкцией при клике на Play.",
+                                        color = TextSecondary,
+                                        fontSize = 11.5.sp,
+                                        lineHeight = 15.sp
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.width(8.dp))
+
+                                Switch(
+                                    checked = showLaunchTipEnabled,
+                                    onCheckedChange = { checked ->
+                                        showLaunchTipEnabled = checked
+                                        RetroArchManager.setShowLaunchTipEnabled(context, checked)
                                     },
-                                    color = TextMuted,
-                                    fontSize = 11.5.sp,
-                                    lineHeight = 15.sp
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = OnPrimary,
+                                        checkedTrackColor = EmeraldGreen,
+                                        uncheckedThumbColor = TextMuted,
+                                        uncheckedTrackColor = ArcadeSurfaceContainer
+                                    )
                                 )
                             }
                         }
 
-                        // Help & Tips Card
+                        // Core download & black screen prevention guide
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -1015,14 +1069,25 @@ fun SettingsDialog(
                         ) {
                             Column {
                                 Text(
-                                    text = "Как это работает:",
+                                    text = "💡 Как избежать черного экрана в RetroArch:",
                                     color = GoldenAmber,
-                                    fontSize = 12.sp,
+                                    fontSize = 12.5.sp,
                                     fontWeight = FontWeight.Bold
                                 )
-                                Spacer(modifier = Modifier.height(4.dp))
+                                Spacer(modifier = Modifier.height(6.dp))
                                 Text(
-                                    text = "• Работает как в режиме Сетки, так и в режиме Списка.\n• На скачанных играх кнопка меняется на зеленую ▶ (без текста).\n• Если RetroArch не установлен, приложение предложит скачать его или открыть в другом эмуляторе.",
+                                    text = "RetroArch скачивается из магазина абсолютно пустым — без встроенных ядер эмуляторов. При запуске игры без установленного ядра RetroArch виснет на черном экране.\n\n" +
+                                            "Чтобы всё работало:\n" +
+                                            "1. Откройте RetroArch (кнопка выше)\n" +
+                                            "2. Перейдите: Меню ➔ «Обновление сети» (Online Updater) ➔ «Загрузка ядер» (Core Downloader)\n" +
+                                            "3. Скачайте рекомендованные ядра:\n" +
+                                            "   • Dendy / NES: FCEUmm или Nestopia\n" +
+                                            "   • Sega Mega Drive: Genesis Plus GX\n" +
+                                            "   • SNES: Snes9x\n" +
+                                            "   • Game Boy / Color: Gambatte\n" +
+                                            "   • Game Boy Advance: mGBA\n" +
+                                            "   • PlayStation 1: PCSX ReARMed\n" +
+                                            "   • Nintendo 64: Mupen64Plus-Next",
                                     color = TextSecondary,
                                     fontSize = 11.5.sp,
                                     lineHeight = 16.sp
