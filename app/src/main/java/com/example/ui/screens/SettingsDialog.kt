@@ -47,6 +47,8 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
@@ -846,6 +848,15 @@ fun SettingsDialog(
                     var showLaunchTipEnabled by remember {
                         mutableStateOf(RetroArchManager.isShowLaunchTipEnabled(context))
                     }
+                    var customConfigText by remember {
+                        mutableStateOf(RetroArchManager.getCustomConfigPath(context) ?: "")
+                    }
+                    val detectedSharedConfigs = remember {
+                        RetroArchManager.findExistingSharedConfigs()
+                    }
+                    val effectiveConfig = remember(customConfigText, detectedPkg) {
+                        RetroArchManager.getEffectiveConfigPath(context, detectedPkg ?: "com.retroarch.aarch64")
+                    }
 
                     Column(
                         modifier = Modifier
@@ -1055,6 +1066,172 @@ fun SettingsDialog(
                                         uncheckedTrackColor = ArcadeSurfaceContainer
                                     )
                                 )
+                            }
+                        }
+
+                        // RetroArch Config & Touch Controls (Overlay) Card
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(ArcadeSurfaceVariant)
+                                .border(1.dp, ArcadeCardBorder, RoundedCornerShape(14.dp))
+                                .padding(14.dp)
+                        ) {
+                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.SportsEsports,
+                                        contentDescription = null,
+                                        tint = NeonCyan,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Column {
+                                        Text(
+                                            text = "Конфигурация и оверлей кнопок",
+                                            color = TextPrimary,
+                                            fontSize = 13.5.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Text(
+                                            text = "RetroArch считывает сенсорные кнопки и пути из retroarch.cfg",
+                                            color = TextSecondary,
+                                            fontSize = 11.sp
+                                        )
+                                    }
+                                }
+
+                                // Current active config path pill
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(ArcadeSurfaceContainer)
+                                        .border(1.dp, ArcadeCardBorder.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                                        .padding(horizontal = 10.dp, vertical = 8.dp)
+                                ) {
+                                    Column {
+                                        Text(
+                                            text = "Текущий путь (передаётся через CONFIGFILE):",
+                                            color = TextMuted,
+                                            fontSize = 10.5.sp
+                                        )
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = effectiveConfig,
+                                            color = EmeraldGreen,
+                                            fontSize = 11.5.sp,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    }
+                                }
+
+                                // Quick presets
+                                Text(
+                                    text = "Быстрый выбор:",
+                                    color = TextMuted,
+                                    fontSize = 11.sp
+                                )
+                                val defaultPkgPath = RetroArchManager.getDefaultPackageConfigPath(detectedPkg ?: "com.retroarch.aarch64")
+                                val isDefaultSelected = customConfigText.isBlank()
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .horizontalScroll(rememberScrollState()),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(if (isDefaultSelected) NeonCyan.copy(alpha = 0.18f) else ArcadeSurfaceContainer)
+                                            .border(1.dp, if (isDefaultSelected) NeonCyan else ArcadeCardBorder, RoundedCornerShape(8.dp))
+                                            .clickable {
+                                                customConfigText = ""
+                                                RetroArchManager.setCustomConfigPath(context, null)
+                                            }
+                                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                                    ) {
+                                        Text(
+                                            text = "По умолчанию (Android/data)",
+                                            color = if (isDefaultSelected) NeonCyan else TextSecondary,
+                                            fontSize = 11.sp,
+                                            fontWeight = if (isDefaultSelected) FontWeight.Bold else FontWeight.Normal
+                                        )
+                                    }
+
+                                    detectedSharedConfigs.forEach { file ->
+                                        val isSelected = customConfigText == file.absolutePath
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(if (isSelected) EmeraldGreen.copy(alpha = 0.18f) else ArcadeSurfaceContainer)
+                                                .border(1.dp, if (isSelected) EmeraldGreen else ArcadeCardBorder, RoundedCornerShape(8.dp))
+                                                .clickable {
+                                                    customConfigText = file.absolutePath
+                                                    RetroArchManager.setCustomConfigPath(context, file.absolutePath)
+                                                }
+                                                .padding(horizontal = 10.dp, vertical = 6.dp)
+                                        ) {
+                                            Text(
+                                                text = "Найдено: ${file.name} (${file.parentFile?.name})",
+                                                color = if (isSelected) EmeraldGreen else TextSecondary,
+                                                fontSize = 11.sp,
+                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                            )
+                                        }
+                                    }
+                                }
+
+                                // Custom path input
+                                OutlinedTextField(
+                                    value = customConfigText,
+                                    onValueChange = { newVal ->
+                                        customConfigText = newVal
+                                        RetroArchManager.setCustomConfigPath(context, newVal.ifBlank { null })
+                                    },
+                                    label = { Text("Пользовательский путь к retroarch.cfg", fontSize = 11.sp) },
+                                    placeholder = { Text(defaultPkgPath, fontSize = 11.sp, color = TextMuted) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    singleLine = true,
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = NeonCyan,
+                                        unfocusedBorderColor = ArcadeCardBorder,
+                                        focusedTextColor = TextPrimary,
+                                        unfocusedTextColor = TextPrimary,
+                                        cursorColor = NeonCyan
+                                    )
+                                )
+
+                                // Instructions how to configure overlay in RetroArch
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(ArcadeSurfaceContainer)
+                                        .border(1.dp, ArcadeCardBorder.copy(alpha = 0.4f), RoundedCornerShape(10.dp))
+                                        .padding(10.dp)
+                                ) {
+                                    Column {
+                                        Text(
+                                            text = "🕹️ Как включить сенсорные кнопки в RetroArch:",
+                                            color = GoldenAmber,
+                                            fontSize = 11.5.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = "1. Откройте RetroArch (кнопка вверху вкладки)\n" +
+                                                    "2. Перейдите: «Настройки» ➔ «Экранное наложение» (On-Screen Overlay)\n" +
+                                                    "3. Включите «Отображать оверлей» (Display Overlay)\n" +
+                                                    "4. Сохраните: «Главное меню» ➔ «Файл конфигурации» ➔ «Сохранить текущую конфигурацию»\n\n" +
+                                                    "После этого RetroROMs будет передавать сохранённую конфигурацию, и кнопки отобразятся сразу!",
+                                            color = TextSecondary,
+                                            fontSize = 10.5.sp,
+                                            lineHeight = 15.sp
+                                        )
+                                    }
+                                }
                             }
                         }
 

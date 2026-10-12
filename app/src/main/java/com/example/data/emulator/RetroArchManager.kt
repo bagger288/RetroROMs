@@ -158,6 +158,8 @@ object RetroArchManager {
         )
     )
 
+    const val KEY_CUSTOM_CONFIG_PATH = "retroarch_custom_config_path"
+
     private fun getPrefs(context: Context): SharedPreferences {
         return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     }
@@ -168,6 +170,68 @@ object RetroArchManager {
 
     fun setShowLaunchTipEnabled(context: Context, enabled: Boolean) {
         getPrefs(context).edit().putBoolean(KEY_SHOW_LAUNCH_TIP, enabled).apply()
+    }
+
+    fun getCustomConfigPath(context: Context): String? {
+        return getPrefs(context).getString(KEY_CUSTOM_CONFIG_PATH, null)?.trim()?.ifBlank { null }
+    }
+
+    fun setCustomConfigPath(context: Context, path: String?) {
+        val editor = getPrefs(context).edit()
+        if (path.isNullOrBlank()) {
+            editor.remove(KEY_CUSTOM_CONFIG_PATH)
+        } else {
+            editor.putString(KEY_CUSTOM_CONFIG_PATH, path.trim())
+        }
+        editor.apply()
+    }
+
+    fun getDefaultPackageConfigPath(targetPackage: String): String {
+        return "/storage/emulated/0/Android/data/$targetPackage/files/retroarch.cfg"
+    }
+
+    /**
+     * Looks for existing RetroArch config files saved on shared storage
+     * (e.g. when user uses "Save Current Configuration" or "Save New Configuration" in RetroArch).
+     */
+    fun findExistingSharedConfigs(): List<File> {
+        val candidates = listOf(
+            File("/storage/emulated/0/RetroArch/retroarch.cfg"),
+            File("/storage/emulated/0/RetroArch/config/retroarch.cfg"),
+            File(Environment.getExternalStorageDirectory(), "RetroArch/retroarch.cfg"),
+            File(Environment.getExternalStorageDirectory(), "RetroArch/config/retroarch.cfg"),
+            File(Environment.getExternalStorageDirectory(), "Download/RetroArch/retroarch.cfg"),
+            File(Environment.getExternalStorageDirectory(), "Download/retroarch.cfg")
+        )
+        return candidates.filter { file ->
+            try {
+                file.exists() && file.isFile && file.length() > 0
+            } catch (_: Exception) {
+                false
+            }
+        }.distinctBy { it.absolutePath }
+    }
+
+    /**
+     * Resolves the actual config file path passed to RetroArch via CONFIGFILE extra.
+     * Passing CONFIGFILE is required so RetroArch sets its config directory,
+     * loads assets, enables virtual buttons overlay, and allows saving configuration.
+     */
+    fun getEffectiveConfigPath(context: Context, targetPackage: String): String {
+        // 1. Explicit user custom path in settings
+        val custom = getCustomConfigPath(context)
+        if (!custom.isNullOrBlank()) {
+            return custom
+        }
+
+        // 2. Detected existing configuration in shared storage (e.g. /sdcard/RetroArch/retroarch.cfg)
+        val existing = findExistingSharedConfigs()
+        if (existing.isNotEmpty()) {
+            return existing.first().absolutePath
+        }
+
+        // 3. Default standard package config path
+        return getDefaultPackageConfigPath(targetPackage)
     }
 
     fun getPreferredCore(context: Context, consoleSlug: String, romFile: File? = null): CoreOption {
@@ -239,7 +303,8 @@ object RetroArchManager {
     }
 
     /**
-     * Builds the exact RetroArch launch Intent using RetroActivityFuture and LIBRETRO extra.
+     * Builds the exact RetroArch launch Intent using RetroActivityFuture, LIBRETRO extra,
+     * and CONFIGFILE extra (essential for on-screen controls overlay and asset loading).
      */
     fun createLaunchIntent(
         context: Context,
@@ -251,6 +316,7 @@ object RetroArchManager {
         val canonicalFile = try { romFile.canonicalFile } catch (_: Exception) { romFile }
         val romPath = canonicalFile.absolutePath
         val corePath = "/data/data/$targetPackage/cores/${core.fileName}"
+        val configPath = getEffectiveConfigPath(context, targetPackage)
 
         return Intent(Intent.ACTION_MAIN).apply {
             component = ComponentName(targetPackage, "com.retroarch.browser.retroactivity.RetroActivityFuture")
@@ -260,10 +326,7 @@ object RetroArchManager {
             putExtra("ROM", romPath)
             putExtra("PATH", romPath)
             putExtra("LIBRETRO", corePath)
-
-            // Note: CONFIGFILE is intentionally omitted here. Passing a custom or /Android/data/ path
-            // causes Android 11+ SecurityException / EACCES permission denied and results in an endless black screen.
-            // Omission allows RetroArch to safely use its internal default config.
+            putExtra("CONFIGFILE", configPath)
 
             // Also attach contentUri and permissions
             data = contentUri
@@ -287,14 +350,16 @@ object RetroArchManager {
         val canonicalFile = try { romFile.canonicalFile } catch (_: Exception) { romFile }
         val romPath = canonicalFile.absolutePath
         val corePath = "/data/data/$targetPackage/cores/${core.fileName}"
+        val configPath = getEffectiveConfigPath(context, targetPackage)
 
         val launchIntent = pm.getLaunchIntentForPackage(targetPackage)?.apply {
             putExtra("ROM", romPath)
             putExtra("PATH", romPath)
             putExtra("LIBRETRO", corePath)
+            putExtra("CONFIGFILE", configPath)
             data = contentUri
             clipData = ClipData.newRawUri("ROM", contentUri)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         }
         return launchIntent

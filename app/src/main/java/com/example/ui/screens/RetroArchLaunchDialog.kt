@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Gamepad
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -185,6 +186,32 @@ fun RetroArchLaunchDialog(
                             color = TextSecondary,
                             fontSize = 11.5.sp,
                             lineHeight = 16.sp
+                        )
+                    }
+                }
+
+                // Touch controls (overlay) note
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(ArcadeSurfaceContainer)
+                        .border(1.dp, ArcadeCardBorder.copy(alpha = 0.5f), RoundedCornerShape(10.dp))
+                        .padding(10.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.SportsEsports,
+                            contentDescription = null,
+                            tint = NeonCyan,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Кнопки управления: конфигурация retroarch.cfg передаётся автоматически для отображения оверлея.",
+                            color = TextSecondary,
+                            fontSize = 11.sp,
+                            lineHeight = 15.sp
                         )
                     }
                 }
