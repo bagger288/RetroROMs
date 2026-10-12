@@ -496,6 +496,9 @@ fun RetroROMsApp(viewModel: EmuLandViewModel = viewModel()) {
             onLaunchNow = {
                 viewModel.executeDirectRetroArchLaunch(context, tip.game)
             },
+            onSelectCore = { core ->
+                viewModel.selectCoreForLaunch(context, tip.game, core)
+            },
             onOpenRetroArchMenu = {
                 viewModel.openRetroArchMainMenu(context)
             },

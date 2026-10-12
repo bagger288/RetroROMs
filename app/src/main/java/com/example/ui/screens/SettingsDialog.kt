@@ -1271,6 +1271,196 @@ fun SettingsDialog(
                                 )
                             }
                         }
+
+                        // Cores per platform management card
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(ArcadeSurfaceVariant)
+                                .border(1.dp, ArcadeCardBorder, RoundedCornerShape(14.dp))
+                                .padding(14.dp)
+                        ) {
+                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.Gamepad,
+                                        contentDescription = null,
+                                        tint = NeonCyan,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Column {
+                                        Text(
+                                            text = "Ядра эмуляции по платформам",
+                                            color = TextPrimary,
+                                            fontSize = 13.5.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Text(
+                                            text = "Автоматический подбор из истории RetroArch или ручной выбор",
+                                            color = TextSecondary,
+                                            fontSize = 11.sp
+                                        )
+                                    }
+                                }
+
+                                val keyConsoles = listOf(
+                                    "dendy" to "Dendy / NES",
+                                    "genesis" to "Sega Mega Drive",
+                                    "snes" to "Super Nintendo (SNES)",
+                                    "gba" to "Game Boy Advance",
+                                    "gb" to "Game Boy",
+                                    "gbc" to "Game Boy Color",
+                                    "psx" to "Sony PlayStation 1",
+                                    "n64" to "Nintendo 64",
+                                    "segacd" to "Sega CD / Mega CD",
+                                    "pce" to "PC Engine",
+                                    "neogeocd" to "Neo Geo CD"
+                                )
+
+                                var expandedConsoleSlug by remember { mutableStateOf<String?>(null) }
+                                var coreUpdateTrigger by remember { mutableIntStateOf(0) }
+
+                                keyConsoles.forEach { (slug, consoleName) ->
+                                    val resolved = remember(slug, coreUpdateTrigger) {
+                                        RetroArchManager.resolveCore(context, slug)
+                                    }
+                                    val isExpanded = expandedConsoleSlug == slug
+
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .background(ArcadeSurfaceContainer)
+                                            .border(1.dp, ArcadeCardBorder.copy(alpha = 0.5f), RoundedCornerShape(10.dp))
+                                            .clickable {
+                                                expandedConsoleSlug = if (isExpanded) null else slug
+                                            }
+                                            .padding(10.dp)
+                                    ) {
+                                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.SpaceBetween
+                                            ) {
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                    Text(
+                                                        text = consoleName,
+                                                        color = TextPrimary,
+                                                        fontSize = 12.5.sp,
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        Text(
+                                                            text = resolved.core.displayName,
+                                                            color = EmeraldGreen,
+                                                            fontSize = 11.5.sp,
+                                                            fontWeight = FontWeight.SemiBold
+                                                        )
+                                                        Spacer(modifier = Modifier.width(6.dp))
+                                                        val sourceBadge = when (resolved.source) {
+                                                            com.example.data.emulator.CoreSelectionSource.HISTORY -> "★ История"
+                                                            com.example.data.emulator.CoreSelectionSource.USER_SELECTED -> "Пользовательское"
+                                                            com.example.data.emulator.CoreSelectionSource.DEFAULT -> "Авто"
+                                                        }
+                                                        Text(
+                                                            text = "($sourceBadge)",
+                                                            color = when (resolved.source) {
+                                                                com.example.data.emulator.CoreSelectionSource.HISTORY -> EmeraldGreen
+                                                                com.example.data.emulator.CoreSelectionSource.USER_SELECTED -> NeonCyan
+                                                                com.example.data.emulator.CoreSelectionSource.DEFAULT -> TextMuted
+                                                            },
+                                                            fontSize = 10.sp
+                                                        )
+                                                    }
+                                                }
+
+                                                Icon(
+                                                    imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                                    contentDescription = null,
+                                                    tint = TextMuted,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                            }
+
+                                            if (isExpanded) {
+                                                Spacer(modifier = Modifier.height(4.dp))
+                                                Text(
+                                                    text = "Доступные ядра:",
+                                                    color = TextMuted,
+                                                    fontSize = 10.5.sp
+                                                )
+
+                                                resolved.availableCores.forEach { coreOption ->
+                                                    val isSelected = coreOption.id == resolved.core.id
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .clip(RoundedCornerShape(8.dp))
+                                                            .background(if (isSelected) EmeraldGreen.copy(alpha = 0.15f) else ArcadeSurfaceVariant)
+                                                            .border(
+                                                                1.dp,
+                                                                if (isSelected) EmeraldGreen else ArcadeCardBorder.copy(alpha = 0.4f),
+                                                                RoundedCornerShape(8.dp)
+                                                            )
+                                                            .clickable {
+                                                                RetroArchManager.setPreferredCore(context, slug, coreOption.id)
+                                                                coreUpdateTrigger++
+                                                            }
+                                                            .padding(horizontal = 8.dp, vertical = 6.dp)
+                                                    ) {
+                                                        Row(
+                                                            modifier = Modifier.fillMaxWidth(),
+                                                            verticalAlignment = Alignment.CenterVertically
+                                                        ) {
+                                                            Icon(
+                                                                imageVector = if (isSelected) Icons.Default.CheckCircle else Icons.Default.Gamepad,
+                                                                contentDescription = null,
+                                                                tint = if (isSelected) EmeraldGreen else TextMuted,
+                                                                modifier = Modifier.size(16.dp)
+                                                            )
+                                                            Spacer(modifier = Modifier.width(6.dp))
+                                                            Column(modifier = Modifier.weight(1f)) {
+                                                                Text(
+                                                                    text = coreOption.displayName,
+                                                                    color = if (isSelected) TextPrimary else TextSecondary,
+                                                                    fontSize = 11.5.sp,
+                                                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                                                )
+                                                                if (coreOption.description.isNotBlank()) {
+                                                                    Text(
+                                                                        text = coreOption.description,
+                                                                        color = TextMuted,
+                                                                        fontSize = 10.sp
+                                                                    )
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+
+                                                if (resolved.source == com.example.data.emulator.CoreSelectionSource.USER_SELECTED) {
+                                                    Text(
+                                                        text = "Сбросить на автоматический подбор",
+                                                        color = NeonCyan,
+                                                        fontSize = 11.sp,
+                                                        fontWeight = FontWeight.SemiBold,
+                                                        modifier = Modifier
+                                                            .clickable {
+                                                                RetroArchManager.clearPreferredCore(context, slug)
+                                                                coreUpdateTrigger++
+                                                            }
+                                                            .padding(top = 2.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
 

@@ -17,11 +17,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Gamepad
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SportsEsports
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -43,6 +46,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.emulator.CoreOption
+import com.example.data.emulator.CoreSelectionSource
 import com.example.ui.theme.ArcadeCardBorder
 import com.example.ui.theme.ArcadeSurfaceContainer
 import com.example.ui.theme.ArcadeSurfaceVariant
@@ -59,6 +64,7 @@ import com.example.ui.viewmodel.RetroArchTipData
 fun RetroArchLaunchDialog(
     tip: RetroArchTipData,
     onLaunchNow: () -> Unit,
+    onSelectCore: (CoreOption) -> Unit,
     onOpenRetroArchMenu: () -> Unit,
     onOpenOtherEmulator: () -> Unit,
     onDismiss: () -> Unit,
@@ -111,17 +117,21 @@ fun RetroArchLaunchDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                // Info pill with required core
+                // Info pill with platform and currently active core
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(10.dp))
+                        .clip(RoundedCornerShape(12.dp))
                         .background(ArcadeSurfaceContainer)
-                        .border(1.dp, ArcadeCardBorder, RoundedCornerShape(10.dp))
-                        .padding(10.dp)
+                        .border(1.dp, ArcadeCardBorder, RoundedCornerShape(12.dp))
+                        .padding(12.dp)
                 ) {
-                    Column {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
                             Text(
                                 text = "Платформа: ",
                                 color = TextMuted,
@@ -134,24 +144,115 @@ fun RetroArchLaunchDialog(
                                 fontWeight = FontWeight.Bold
                             )
                         }
-                        Spacer(modifier = Modifier.height(3.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
                             Text(
-                                text = "Ядро Libretro: ",
+                                text = "Активное ядро: ",
                                 color = TextMuted,
                                 fontSize = 12.sp
                             )
                             Text(
-                                text = tip.coreDisplayName,
+                                text = tip.selectedCore.displayName,
                                 color = EmeraldGreen,
-                                fontSize = 12.sp,
+                                fontSize = 12.5.sp,
                                 fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        // Source badge
+                        val (badgeText, badgeColor, badgeIcon) = when (tip.source) {
+                            CoreSelectionSource.HISTORY -> Triple("★ Найдено в истории RetroArch (установлено)", EmeraldGreen, Icons.Default.CheckCircle)
+                            CoreSelectionSource.USER_SELECTED -> Triple("Выбрано вами", NeonCyan, Icons.Default.Check)
+                            CoreSelectionSource.DEFAULT -> Triple("Рекомендованное по умолчанию", GoldenAmber, Icons.Default.Star)
+                        }
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(badgeColor.copy(alpha = 0.12f))
+                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = badgeIcon,
+                                contentDescription = null,
+                                tint = badgeColor,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = badgeText,
+                                color = badgeColor,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium
                             )
                         }
                     }
                 }
 
-                // Black screen warning and explanation card
+                // Available cores selector (if more than 1 core exists for this console)
+                if (tip.availableCores.size > 1) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = "Выберите ядро для этой платформы:",
+                            color = TextPrimary,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+
+                        tip.availableCores.forEach { coreOption ->
+                            val isSelected = coreOption.id == tip.selectedCore.id
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(if (isSelected) EmeraldGreen.copy(alpha = 0.15f) else ArcadeSurfaceContainer)
+                                    .border(
+                                        1.dp,
+                                        if (isSelected) EmeraldGreen else ArcadeCardBorder.copy(alpha = 0.6f),
+                                        RoundedCornerShape(10.dp)
+                                    )
+                                    .clickable { onSelectCore(coreOption) }
+                                    .padding(horizontal = 10.dp, vertical = 8.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = if (isSelected) Icons.Default.CheckCircle else Icons.Default.Gamepad,
+                                        contentDescription = null,
+                                        tint = if (isSelected) EmeraldGreen else TextMuted,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = coreOption.displayName,
+                                            color = if (isSelected) TextPrimary else TextSecondary,
+                                            fontSize = 12.sp,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                        )
+                                        if (coreOption.description.isNotBlank()) {
+                                            Text(
+                                                text = coreOption.description,
+                                                color = TextMuted,
+                                                fontSize = 10.5.sp
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Black screen warning & instructions
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -172,20 +273,18 @@ fun RetroArchLaunchDialog(
                             Text(
                                 text = "Если в RetroArch черный экран:",
                                 color = GoldenAmber,
-                                fontSize = 13.sp,
+                                fontSize = 12.5.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         }
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "RetroArch скачивается без ядер. Чтобы игра стартовала, ядро должно быть скачано в эмуляторе:\n\n" +
-                                    "1. Нажмите кнопку «Меню RetroArch» ниже\n" +
-                                    "2. Откройте «Обновление сети» ➔ «Загрузка ядер»\n" +
-                                    "3. Найдите и скачайте ядро «${tip.coreDisplayName}»\n" +
-                                    "4. Затем вернитесь сюда и запустите игру!",
+                            text = "RetroArch виснет на черном экране, если выбранное ядро не установлено. " +
+                                    "Если у вас установлено другое ядро — выберите его из списка выше. " +
+                                    "Либо скачайте «${tip.selectedCore.displayName}» через онлайн-апдейтер в RetroArch.",
                             color = TextSecondary,
-                            fontSize = 11.5.sp,
-                            lineHeight = 16.sp
+                            fontSize = 11.sp,
+                            lineHeight = 15.sp
                         )
                     }
                 }
@@ -251,7 +350,7 @@ fun RetroArchLaunchDialog(
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = "Больше не показывать (запускать сразу)",
+                        text = "Больше не спрашивать (запускать сразу)",
                         color = TextMuted,
                         fontSize = 12.sp
                     )

@@ -13,6 +13,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.downloader.RomDownloader
 import com.example.data.emulator.CoreOption
+import com.example.data.emulator.CoreSelectionSource
 import com.example.data.emulator.RetroArchManager
 import com.example.data.local.AppDatabase
 import com.example.data.remote.EmuLandScraper
@@ -752,7 +753,8 @@ class EmuLandViewModel(application: Application) : AndroidViewModel(application)
             }
 
             val canonicalFile = try { file.canonicalFile } catch (_: Exception) { file }
-            val core = RetroArchManager.getPreferredCore(context, game.consoleSlug, canonicalFile)
+            val resolvedCore = RetroArchManager.resolveCore(context, game.consoleSlug, canonicalFile)
+            val core = resolvedCore.core
 
             // If launch tip is enabled (or forced), show tip dialog first so user knows which core is needed!
             if (forceTip || RetroArchManager.isShowLaunchTipEnabled(context)) {
@@ -760,6 +762,9 @@ class EmuLandViewModel(application: Application) : AndroidViewModel(application)
                     game = game,
                     coreDisplayName = core.displayName,
                     coreFileName = core.fileName,
+                    selectedCore = core,
+                    availableCores = resolvedCore.availableCores,
+                    source = resolvedCore.source,
                     isInstalled = true
                 )
                 return@launch
@@ -910,8 +915,29 @@ class EmuLandViewModel(application: Application) : AndroidViewModel(application)
         return RetroArchManager.getPreferredCore(context, slug)
     }
 
+    fun resolveCoreForConsole(context: Context, slug: String): com.example.data.emulator.ResolvedCoreResult {
+        return RetroArchManager.resolveCore(context, slug)
+    }
+
     fun setPreferredCoreForConsole(context: Context, slug: String, coreId: String) {
         RetroArchManager.setPreferredCore(context, slug, coreId)
+    }
+
+    fun clearPreferredCoreForConsole(context: Context, slug: String) {
+        RetroArchManager.clearPreferredCore(context, slug)
+    }
+
+    fun selectCoreForLaunch(context: Context, game: GameCard, newCore: CoreOption) {
+        RetroArchManager.setPreferredCore(context, game.consoleSlug, newCore.id)
+        val currentTip = _retroArchLaunchTip.value
+        if (currentTip != null && currentTip.game.id == game.id) {
+            _retroArchLaunchTip.value = currentTip.copy(
+                selectedCore = newCore,
+                coreDisplayName = newCore.displayName,
+                coreFileName = newCore.fileName,
+                source = CoreSelectionSource.USER_SELECTED
+            )
+        }
     }
 
     fun getAvailableCoresForConsole(slug: String): List<CoreOption> {
@@ -923,5 +949,8 @@ data class RetroArchTipData(
     val game: GameCard,
     val coreDisplayName: String,
     val coreFileName: String,
-    val isInstalled: Boolean
+    val selectedCore: CoreOption,
+    val availableCores: List<CoreOption>,
+    val source: CoreSelectionSource,
+    val isInstalled: Boolean = true
 )
